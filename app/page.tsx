@@ -1014,6 +1014,437 @@ function TasksTab() {
   );
 }
 
+// ─── Voice Tab ─────────────────────────────────────────────────────────────────
+
+type VoiceState = "idle" | "connecting" | "listening" | "processing" | "speaking";
+
+function VoiceTab() {
+  const [state, setState] = useState<VoiceState>("idle");
+  const [transcript, setTranscript] = useState("");
+  const [response, setResponse] = useState("");
+  const [isJarvisOnline, setIsJarvisOnline] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [volume, setVolume] = useState(0.8);
+  const [showTranscript, setShowTranscript] = useState(false);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioQueueRef = useRef<HTMLAudioElement[]>([]);
+  const isPlayingRef = useRef(false);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animFrameRef = useRef<number>(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+
+  // Check JARVIS health on mount
+  useEffect(() => {
+    fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) })
+      .then(r => setIsJarvisOnline(r.ok))
+      .catch(() => setIsJarvisOnline(false));
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopAll();
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  // Auto-scroll transcript
+  useEffect(() => {
+    transcriptRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript, response]);
+
+  // Audio playback queue
+  const playNext = useCallback(() => {
+    if (audioQueueRef.current.length === 0) {
+      isPlayingRef.current = false;
+      setState("idle");
+      return;
+    }
+    const audio = audioQueueRef.current.shift()!;
+    audio.volume = volume;
+    audio.onended = () => playNext();
+    audio.play().catch(() => playNext());
+  }, [volume]);
+
+  const playAudioChunk = useCallback((b64Data: string) => {
+    // Decode base64 to ArrayBuffer
+    const binary = atob(b64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: "audio/mp3" });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.volume = volume;
+
+    if (!isPlayingRef.current) {
+      isPlayingRef.current = true;
+      setState("speaking");
+      audio.onended = () => playNext();
+      audio.play().catch(() => playNext());
+    } else {
+      audioQueueRef.current.push(audio);
+    }
+  }, [volume, playNext]);
+
+  const connect = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+    setError(null);
+    setState("connecting");
+
+    const ws = new WebSocket("ws://localhost:8080/ws/voice");
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setState("idle");
+    };
+
+    ws.onmessage = async (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        switch (msg.type) {
+          case "status":
+            if (msg.state === "listening") setState("listening");
+            else if (msg.state === "processing") setState("processing");
+            else if (msg.state === "idle" || msg.state === "done") {
+              setState(prev => prev === "speaking" ? "speaking" : "idle");
+            }
+            break;
+
+          case "transcript":
+            setTranscript(prev => {
+              if (prev && !prev.endsWith(" ")) return prev + " " + msg.text;
+              return prev + msg.text;
+            });
+            break;
+
+          case "llm_chunk":
+            setResponse(prev => prev + msg.delta);
+            break;
+
+          case "audio":
+            if (msg.data) playAudioChunk(msg.data);
+            break;
+
+          case "audio_done":
+            // No-op, audio queue handles it
+            break;
+
+          case "error":
+            setError(msg.message);
+            setState("idle");
+            break;
+        }
+      } catch {
+        // Ignore non-JSON messages
+      }
+    };
+
+    ws.onerror = () => {
+      setError("WebSocket connection failed");
+      setState("idle");
+    };
+
+    ws.onclose = () => {
+      setState(prev => prev === "idle" ? "idle" : "idle");
+    };
+  }, [playAudioChunk]);
+
+  const disconnect = useCallback(() => {
+    stopAll();
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    setState("idle");
+  }, []);
+
+  const stopAll = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    setState("idle");
+  };
+
+  // Visualizer: draw audio levels
+  const drawWaveform = useCallback(() => {
+    const canvas = canvasRef.current;
+    const analyser = analyserRef.current;
+    if (!canvas || !analyser) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteTimeDomainData(buf);
+
+    ctx.fillStyle = "#0a0a0f";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (state === "listening") {
+      // Draw waveform
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#06b6d4";
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = "#06b6d4";
+      ctx.beginPath();
+      const sliceW = canvas.width / buf.length;
+      let x = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = buf[i] / 128.0;
+        const y = v * canvas.height / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceW;
+      }
+      ctx.stroke();
+    } else {
+      // Draw idle ring
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const r = Math.min(cx, cy) - 20;
+      ctx.strokeStyle = "#2a2a3a";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (state === "speaking") {
+        ctx.strokeStyle = "#06b6d4";
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = "#06b6d4";
+        ctx.stroke();
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(drawWaveform);
+  }, [state]);
+
+  const startListening = useCallback(async () => {
+    if (state === "listening" || state === "processing" || state === "speaking") return;
+    setError(null);
+    setTranscript("");
+    setResponse("");
+
+    // Connect WS if needed
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      connect();
+      // Wait briefly for connection
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Set up audio analyser for visualization
+      const ctx = new AudioContext();
+      audioContextRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      // Start visualizer
+      animFrameRef.current = requestAnimationFrame(drawWaveform);
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/opus",
+      });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = async (e) => {
+        if (e.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+          const buffer = await e.data.arrayBuffer();
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+          wsRef.current.send(JSON.stringify({ type: "audio", data: base64 }));
+        }
+      };
+
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        ctx.close();
+        cancelAnimationFrame(animFrameRef.current);
+        analyserRef.current = null;
+      };
+
+      recorder.start(100); // Send chunks every 100ms
+      setState("listening");
+
+      // Auto-stop after 30s
+      setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") {
+          stopListening();
+        }
+      }, 30000);
+    } catch (err: any) {
+      setError(`Microphone access denied: ${err.message}`);
+      setState("idle");
+    }
+  }, [state, connect, drawWaveform]);
+
+  const stopListening = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      // Send final chunk
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "done" }));
+      }
+      mediaRecorderRef.current.stop();
+    }
+    setState("processing");
+  }, []);
+
+  const jarvisGlow = "text-shadow: 0 0 10px rgba(0,212,255,0.5), 0 0 20px rgba(0,212,255,0.3)";
+
+  const stateColors: Record<VoiceState, string> = {
+    idle: "#64748b",
+    connecting: "#f59e0b",
+    listening: "#06b6d4",
+    processing: "#8b5cf6",
+    speaking: "#10b981",
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Visualizer */}
+      <div className="flex flex-col items-center justify-center py-8 px-4">
+        <canvas
+          ref={canvasRef}
+          width={280}
+          height={120}
+          className="mb-6 rounded-2xl"
+          style={{ background: "#0a0a0f" }}
+        />
+
+        {/* State indicator */}
+        <div className="flex items-center gap-2 mb-4">
+          <div
+            className="w-3 h-3 rounded-full"
+            style={{
+              background: stateColors[state],
+              boxShadow: `0 0 8px ${stateColors[state]}80`,
+            }}
+          />
+          <span
+            className="text-sm font-medium uppercase tracking-wider"
+            style={{ color: stateColors[state] }}
+          >
+            {state}
+          </span>
+        </div>
+
+        {/* JARVIS status */}
+        <div className="flex items-center gap-1.5 mb-6">
+          <div
+            className="w-2 h-2 rounded-full"
+            style={{
+              background: isJarvisOnline ? "#10b981" : "#ef4444",
+              boxShadow: `0 0 6px ${isJarvisOnline ? "#10b981" : "#ef4444"}80`,
+            }}
+          />
+          <span className="text-xs text-slate-500">
+            JARVIS Core {isJarvisOnline ? "online" : "offline"}
+          </span>
+        </div>
+
+        {/* Mic / Stop button */}
+        {state === "idle" || state === "connecting" ? (
+          <button
+            onClick={startListening}
+            disabled={!isJarvisOnline || state === "connecting"}
+            className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+              isJarvisOnline
+                ? "bg-gradient-to-br from-cyan-500 to-violet-600 shadow-[0_0_30px_rgba(6,182,212,0.4)] active:scale-95"
+                : "bg-slate-800 cursor-not-allowed"
+            }`}
+          >
+            <Icon.Mic />
+          </button>
+        ) : state === "listening" ? (
+          <button
+            onClick={stopListening}
+            className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 shadow-[0_0_30px_rgba(6,182,212,0.4)] animate-pulse active:scale-95 transition-all"
+          >
+            <Icon.Mic />
+          </button>
+        ) : (
+          <button
+            onClick={disconnect}
+            className="w-20 h-20 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 active:scale-95 transition-all"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="6" y="6" width="12" height="12"/>
+            </svg>
+          </button>
+        )}
+
+        <p className="text-xs text-slate-500 mt-4 text-center">
+          {state === "idle" && "Tap to start voice conversation"}
+          {state === "connecting" && "Connecting to JARVIS..."}
+          {state === "listening" && "Listening... tap to stop"}
+          {state === "processing" && "Processing your request..."}
+          {state === "speaking" && "JARVIS is responding..."}
+        </p>
+      </div>
+
+      {/* Transcript + Response */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
+        {/* Toggle */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs uppercase tracking-wider text-slate-500 font-medium">Conversation</h3>
+          <button
+            onClick={() => setShowTranscript(!showTranscript)}
+            className="text-xs text-cyan-400 hover:text-cyan-300"
+          >
+            {showTranscript ? "Hide" : "Show"}
+          </button>
+        </div>
+
+        {showTranscript && (transcript || response) && (
+          <div className="space-y-3">
+            {transcript && (
+              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-3">
+                <p className="text-[10px] text-cyan-400 font-medium mb-1.5 flex items-center gap-1">
+                  <Icon.Mic />
+                  You
+                </p>
+                <p className="text-sm text-slate-200 leading-relaxed">{transcript}</p>
+              </div>
+            )}
+
+            {response && (
+              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-3">
+                <p className="text-[10px] text-violet-400 font-medium mb-1.5 flex items-center gap-1">
+                  <Icon.Bot />
+                  JARVIS
+                </p>
+                <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{response}</p>
+              </div>
+            )}
+            <div ref={transcriptRef} />
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-950/30 border border-red-800/40 rounded-xl p-3">
+            <p className="text-xs text-red-400">{error}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
 function SettingsTab() {
@@ -1355,11 +1786,12 @@ function ActivityTab() {
 
 // ─── Bottom Tab Bar ───────────────────────────────────────────────────────────
 
-type Tab = "chat" | "home" | "activity" | "tasks" | "settings";
+type Tab = "chat" | "voice" | "home" | "activity" | "tasks" | "settings";
 
 function BottomTabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs = [
     { id: "chat" as const, label: "Chat", icon: Icon.Chat },
+    { id: "voice" as const, label: "Voice", icon: Icon.Mic },
     { id: "home" as const, label: "Home", icon: Icon.Home },
     { id: "activity" as const, label: "Activity", icon: Icon.Activity },
     { id: "tasks" as const, label: "Tasks", icon: Icon.CheckSquare },
@@ -1453,6 +1885,7 @@ export default function JarvisDashboard() {
       {/* Content area — scrollable */}
       <div className="flex-1 overflow-y-auto content-pad-bottom">
         {activeTab === "chat" && <ChatTab />}
+        {activeTab === "voice" && <VoiceTab />}
         {activeTab === "home" && (
           <HomeTab onRefresh={handleRefresh} lastUpdate={lastUpdate} loading={loading} />
         )}
