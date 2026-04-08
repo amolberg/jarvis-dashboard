@@ -1,129 +1,22 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { format } from "date-fns";
 
-// ─── Icons (inline SVG, no extra deps) ──────────────────────────────────────
-
-const Icon = {
-  Bot: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><circle cx="8" cy="16" r="1" fill="currentColor"/><circle cx="16" cy="16" r="1" fill="currentColor"/>
-    </svg>
-  ),
-  Zap: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-  ),
-  Brain: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
-    </svg>
-  ),
-  Activity: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-    </svg>
-  ),
-  CheckCircle: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-    </svg>
-  ),
-  Clock: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-    </svg>
-  ),
-  AlertCircle: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>
-  ),
-  GitBranch: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>
-    </svg>
-  ),
-  GitCommit: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/>
-    </svg>
-  ),
-  Terminal: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-    </svg>
-  ),
-  Server: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
-    </svg>
-  ),
-  Cpu: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
-    </svg>
-  ),
-  Sparkles: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2zM5 18l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3zM19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75L19 14z"/>
-    </svg>
-  ),
-  RefreshCw: ({ className = "" }: { className?: string }) => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
-      <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-    </svg>
-  ),
-  ArrowRight: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-    </svg>
-  ),
-  Play: () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="5 3 19 12 5 21 5 3"/>
-    </svg>
-  ),
-  Plus: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-    </svg>
-  ),
-  MessageSquare: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
-  ),
-  Lightbulb: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>
-    </svg>
-  ),
-  XCircle: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-    </svg>
-  ),
-  TrendingUp: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-    </svg>
-  ),
-  Circle: ({ className = "" }: { className?: string }) => (
-    <svg width="8" height="8" viewBox="0 0 8 8" className={className}>
-      <circle cx="4" cy="4" r="3" fill="currentColor"/>
-    </svg>
-  ),
-};
-
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: Date;
+}
 
 interface SystemStatus {
   jarvis_core: "online" | "offline" | "unknown";
   ha: "online" | "offline" | "unknown";
   llm: "online" | "offline" | "unknown";
-  cron_engine: "running" | "idle" | "unknown";
-  brain_optimizer: "running" | "idle" | "unknown";
+  uptime: number;
 }
 
 interface Task {
@@ -133,796 +26,1038 @@ interface Task {
   phase: string;
 }
 
-interface ActivityLog {
-  ts: string;
-  type: "info" | "success" | "error" | "warning" | "system";
-  message: string;
-}
+// ─── Icons ───────────────────────────────────────────────────────────────────
 
-interface CommitEntry {
-  ts: string;
-  message: string;
-  branch: string;
-  status: "pushed" | "failed";
-}
+const Icon = {
+  Chat: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  ),
+  Home: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+  ),
+  CheckSquare: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  ),
+  Settings: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  ),
+  Mic: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+  ),
+  Send: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+  ),
+  Zap: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>
+  ),
+  Brain: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+      <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+    </svg>
+  ),
+  RefreshCw: ({ className = "" }: { className?: string }) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+    </svg>
+  ),
+  Activity: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+  ),
+  Server: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/>
+      <line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+    </svg>
+  ),
+  Wifi: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+      <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+    </svg>
+  ),
+  User: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>
+  ),
+  Bot: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/>
+      <path d="M12 7v4"/><circle cx="8" cy="16" r="1" fill="currentColor"/>
+      <circle cx="16" cy="16" r="1" fill="currentColor"/>
+    </svg>
+  ),
+  Play: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <polygon points="5 3 19 12 5 21 5 3"/>
+    </svg>
+  ),
+  AlertCircle: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+  ),
+  Cpu: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>
+      <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
+      <line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/>
+      <line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/>
+      <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
+    </svg>
+  ),
+  Sparkles: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2zM5 18l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3zM19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75L19 14z"/>
+    </svg>
+  ),
+  ChevronRight: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  ),
+  CheckCircle: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+  ),
+  Clock: () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>
+  ),
+};
 
-interface SkillGap {
-  topic: string;
-  priority: "high" | "medium" | "low";
-  suggestion: string;
-  symptoms_matched: number;
-}
+// ─── Status Dot ──────────────────────────────────────────────────────────────
 
-interface DashboardData {
-  system: SystemStatus;
-  tasks: Task[];
-  activity: ActivityLog[];
-  commits: CommitEntry[];
-  skill_gaps: SkillGap[];
-  uptime: { jarvis: number; brain: number; sessions_archived: number; errors_fixed: number };
-}
-
-// ─── API ─────────────────────────────────────────────────────────────────────
-
-async function fetchDashboard(): Promise<DashboardData> {
-  // Gather data from multiple sources
-  const [todoMd, sessionIndex, errorsMd, patternsMd, suggestionsMd, brainLog] = await Promise.all([
-    readFileSafe("/root/jarvis-dev/TODO.md"),
-    readFileSafe("/root/brain-optimizer/journal/sessions/_index.md"),
-    readFileSafe("/root/brain-optimizer/journal/insights/context/errors.md"),
-    readFileSafe("/root/brain-optimizer/journal/insights/context/patterns.md"),
-    readFileSafe("/root/brain-optimizer/journal/skills/_suggestions_master.md"),
-    readFileSafe("/root/brain-optimizer/brain.log"),
-    checkService("http://localhost:8080/api/health", "jarvis_core"),
-    checkService("http://10.0.0.7:8123/api/", "ha"),
-  ]);
-
-  // Parse tasks from TODO.md
-  const tasks = parseTasks(todoMd);
-
-  // Parse activity from brain.log
-  const activity = parseActivity(brainLog);
-
-  // Parse commits from git
-  const commits = await parseGitCommits();
-
-  // Parse skill gaps
-  const skill_gaps = parseSkillGaps(suggestionsMd);
-
-  // Uptime stats
-  const uptime = parseUptimeStats(brainLog, sessionIndex, errorsMd);
-
-  return {
-    system: await getSystemStatus(),
-    tasks,
-    activity,
-    commits,
-    skill_gaps,
-    uptime,
+function StatusDot({ status, size = 8 }: { status: string; size?: number }) {
+  const map: Record<string, { bg: string; shadow: string }> = {
+    online: { bg: "bg-emerald-400", shadow: "shadow-[0_0_6px_rgba(52,211,153,0.6)]" },
+    running: { bg: "bg-emerald-400", shadow: "shadow-[0_0_6px_rgba(52,211,153,0.6)]" },
+    idle: { bg: "bg-yellow-400", shadow: "shadow-[0_0_6px_rgba(251,191,36,0.6)]" },
+    offline: { bg: "bg-red-400", shadow: "shadow-[0_0_6px_rgba(248,113,113,0.6)]" },
+    unknown: { bg: "bg-slate-500", shadow: "" },
+    done: { bg: "bg-emerald-400", shadow: "shadow-[0_0_6px_rgba(52,211,153,0.6)]" },
+    in_progress: { bg: "bg-cyan-400 animate-pulse", shadow: "shadow-[0_0_8px_rgba(34,211,238,0.6)]" },
+    pending: { bg: "bg-slate-600", shadow: "" },
   };
-}
-
-async function readFileSafe(path: string): Promise<string> {
-  try {
-    const res = await fetch(`/api/read?path=${encodeURIComponent(path)}`);
-    if (res.ok) return await res.text();
-  } catch {}
-  return "";
-}
-
-async function checkService(url: string, name: string): Promise<"online" | "offline" | "unknown"> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-    return res.ok ? "online" : "offline";
-  } catch {
-    return "unknown";
-  }
-}
-
-function parseTasks(md: string): Task[] {
-  const lines = md.split("\n");
-  const tasks: Task[] = [];
-  let currentPhase = "";
-
-  for (const line of lines) {
-    if (line.startsWith("## ")) currentPhase = line.replace("## ", "");
-    if (line.match(/^- \[[x \>]?\] .+/) || line.match(/^\- \[[x \>]?\]/)) {
-      const done = line.includes("- [x]");
-      const inProg = line.includes("- [>]");
-      const content = line.replace(/^-\s?\[[x \>]?\]\s?/, "").trim();
-      const shortContent = content.length > 60 ? content.slice(0, 60) + "…" : content;
-      tasks.push({
-        id: content.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 40),
-        content: shortContent,
-        status: done ? "done" : inProg ? "in_progress" : "pending",
-        phase: currentPhase,
-      });
-    }
-  }
-  return tasks;
-}
-
-function parseActivity(log: string): ActivityLog[] {
-  if (!log) return [];
-  const lines = log.trim().split("\n").slice(-30);
-  return lines.map((line) => {
-    const tsMatch = line.match(/\[(.{16})\]/);
-    const levelMatch = line.match(/\[(INFO|WARN|ERROR)\]/);
-    const message = line.replace(/^\[.{16}\] \[(INFO|WARN|ERROR)\] /, "");
-    return {
-      ts: tsMatch ? tsMatch[1] : "",
-      type: (levelMatch ? levelMatch[1].toLowerCase() : "info") as ActivityLog["type"],
-      message,
-    };
-  });
-}
-
-async function parseGitCommits(): Promise<CommitEntry[]> {
-  try {
-    const res = await fetch("/api/git?repo=jarvis-core");
-    if (res.ok) {
-      const data = await res.json();
-      return data.commits || [];
-    }
-  } catch {}
-  return [];
-}
-
-function parseSkillGaps(md: string): SkillGap[] {
-  if (!md) return [];
-  const gaps: SkillGap[] = [];
-  const sections = md.split(/(?:^## |\n## )/);
-  for (const section of sections) {
-    if (!section.trim()) continue;
-    const priorityMatch = section.match(/\[(HIGH|MEDIUM|LOW)\]/);
-    const topicMatch = section.match(/\*\*Topic:\*\* (.+)/);
-    const suggestionMatch = section.match(/\*\*Suggestion:\*\*(.+?)(?:\n|$)/s);
-    if (priorityMatch && topicMatch) {
-      gaps.push({
-        topic: topicMatch[1],
-        priority: priorityMatch[1].toLowerCase() as SkillGap["priority"],
-        suggestion: suggestionMatch ? suggestionMatch[1].trim() : "",
-        symptoms_matched: 0,
-      });
-    }
-  }
-  return gaps.sort((a, b) => {
-    const order = { high: 0, medium: 1, low: 2 };
-    return order[a.priority] - order[b.priority];
-  });
-}
-
-function parseUptimeStats(brainLog: string, sessionIndex: string, errorsMd: string): DashboardData["uptime"] {
-  const lines = brainLog.split("\n");
-  const brainStarts = lines.filter((l) => l.includes("Brain Optimizer — Starting")).length;
-  const jarvisStarts = lines.filter((l) => l.includes("JARVIS DEV") || l.includes("JARVIS Development")).length;
-  const sessionsMatch = sessionIndex.match(/Sessions archived: (\d+)/);
-  const errorsMatch = errorsMd.match(/## \[.*?\]/g);
-  return {
-    jarvis: jarvisStarts,
-    brain: brainStarts,
-    sessions_archived: sessionsMatch ? parseInt(sessionsMatch[1]) : 0,
-    errors_fixed: errorsMatch ? errorsMatch.length : 0,
-  };
-}
-
-async function getSystemStatus(): Promise<SystemStatus> {
-  const [jc, ha, llm] = await Promise.all([
-    checkService("http://localhost:8080/api/health", "jarvis_core"),
-    fetch("http://10.0.0.7:8123/api/", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "unknown" as const),
-    fetch("http://10.0.0.49:8080/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "unknown" as const),
-  ]);
-  return {
-    jarvis_core: jc,
-    ha: ha as SystemStatus["ha"],
-    llm: llm as SystemStatus["llm"],
-    cron_engine: "running",
-    brain_optimizer: "running",
-  };
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    online: "bg-emerald-400",
-    running: "bg-emerald-400",
-    idle: "bg-yellow-400",
-    offline: "bg-red-400",
-    unknown: "bg-gray-500",
-    done: "bg-emerald-400",
-    in_progress: "bg-cyan-400 animate-pulse",
-    pending: "bg-gray-600",
-  };
+  const { bg, shadow } = map[status] || map.unknown;
   return (
-    <span className={`inline-block w-2 h-2 rounded-full ${colors[status] || "bg-gray-500"}`} />
+    <span
+      className={`inline-block rounded-full ${bg} ${shadow}`}
+      style={{ width: size, height: size }}
+    />
   );
 }
 
-function TaskItem({ task }: { task: Task }) {
-  const statusConfig = {
-    done: { label: "Done", badge: "badge-done" },
-    in_progress: { label: "In Progress", badge: "badge-progress" },
-    pending: { label: "Pending", badge: "badge-pending" },
-  };
-  const cfg = statusConfig[task.status];
-  return (
-    <div className="flex items-start gap-3 py-1.5">
-      <span className="mt-0.5"><StatusDot status={task.status} /></span>
-      <div className="flex-1 min-w-0">
-        <p className={`text-xs leading-relaxed ${task.status === "done" ? "text-slate-500 line-through" : task.status === "in_progress" ? "text-slate-200" : "text-slate-400"}`}>
-          {task.content}
-        </p>
-        {task.status === "in_progress" && (
-          <span className={`text-[10px] mt-0.5 px-1.5 py-0.5 rounded font-medium ${cfg.badge}`}>
-            {cfg.label}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
+// ─── Chat Tab ────────────────────────────────────────────────────────────────
 
-function PhaseGroup({ phase, tasks }: { phase: string; tasks: Task[] }) {
-  const done = tasks.filter((t) => t.status === "done").length;
-  const total = tasks.length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+function ChatTab() {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [jarvisOnline, setJarvisOnline] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  return (
-    <div className="mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">{phase}</h3>
-        <span className="text-[10px] text-slate-500">{done}/{total} ({pct}%)</span>
-      </div>
-      <div className="h-1 bg-slate-800 rounded-full overflow-hidden mb-2">
-        <div className="h-full progress-fill rounded-full" style={{ width: `${pct}%` }} />
-      </div>
-      {tasks.map((t) => <TaskItem key={t.id} task={t} />)}
-    </div>
-  );
-}
+  // Check JARVIS health
+  useEffect(() => {
+    fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) })
+      .then(r => { if (r.ok) setJarvisOnline(true); else setJarvisOnline(false); })
+      .catch(() => setJarvisOnline(false));
+  }, []);
 
-function LogLine({ entry }: { entry: ActivityLog }) {
-  const colors: Record<string, string> = {
-    info: "log-line info",
-    success: "log-line success",
-    error: "log-line error",
-    warning: "log-line warning",
-    system: "log-line system",
-  };
-  return (
-    <div className={colors[entry.type]}>
-      <span className="text-slate-600">[{entry.ts}]</span> {entry.message}
-    </div>
-  );
-}
-
-function CommitItem({ entry }: { entry: CommitEntry }) {
-  return (
-    <div className="flex items-center gap-2 py-1.5 border-b border-slate-800/50 last:border-0">
-      <span className={entry.status === "pushed" ? "text-emerald-400" : "text-red-400"}>
-        <Icon.GitCommit />
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] text-slate-300 truncate">{entry.message}</p>
-        <p className="text-[10px] text-slate-600">{entry.ts} · {entry.branch}</p>
-      </div>
-      <span className={`text-[10px] px-1.5 py-0.5 rounded ${entry.status === "pushed" ? "bg-emerald-900/30 text-emerald-400" : "bg-red-900/30 text-red-400"}`}>
-        {entry.status === "pushed" ? "pushed" : "failed"}
-      </span>
-    </div>
-  );
-}
-
-function SkillGapCard({ gap }: { gap: SkillGap }) {
-  const colors: Record<string, string> = {
-    high: "border-red-800/50 bg-red-950/10",
-    medium: "border-yellow-800/50 bg-yellow-950/10",
-    low: "border-slate-800/50 bg-slate-900/10",
-  };
-  const labelColors: Record<string, string> = {
-    high: "text-red-400 bg-red-900/30",
-    medium: "text-yellow-400 bg-yellow-900/30",
-    low: "text-slate-400 bg-slate-800/30",
-  };
-  return (
-    <div className={`rounded-lg border p-3 ${colors[gap.priority]}`}>
-      <div className="flex items-start justify-between mb-1">
-        <h4 className="text-xs font-medium text-slate-200">{gap.topic}</h4>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${labelColors[gap.priority]}`}>
-          {gap.priority.toUpperCase()}
-        </span>
-      </div>
-      <p className="text-[11px] text-slate-400 leading-relaxed">
-        {gap.suggestion.slice(0, 120)}{gap.suggestion.length > 120 ? "…" : ""}
-      </p>
-    </div>
-  );
-}
-
-function StatCard({ label, value, sub, icon }: { label: string; value: string | number; sub?: string; icon: React.ReactNode }) {
-  return (
-    <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-slate-500 text-[10px] uppercase tracking-wider">{label}</span>
-        <span className="text-slate-400">{icon}</span>
-      </div>
-      <div className="text-2xl font-bold text-white font-mono">{value}</div>
-      {sub && <p className="text-[10px] text-slate-600 mt-1">{sub}</p>}
-    </div>
-  );
-}
-
-// ─── Main Dashboard ─────────────────────────────────────────────────────────
-
-export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [newTask, setNewTask] = useState("");
-  const [showTaskInput, setShowTaskInput] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [activeTab, setActiveTab] = useState<"tasks" | "brain" | "dev">("tasks");
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const d = await fetchDashboard();
-      setData(d);
-      setError(null);
-      setLastUpdate(new Date());
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
+  // Register PWA SW
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
   }, []);
 
+  // Scroll to bottom
   useEffect(() => {
-    load();
-    if (autoRefresh) {
-      intervalRef.current = setInterval(load, 30000);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, streamingContent]);
+
+  // Speech recognition setup
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+        if (event.results[i]?.isFinal) {
+          setIsListening(false);
+        }
+      }
+      setInput(transcript);
     };
-  }, [load, autoRefresh]);
 
-  const doneCount = data?.tasks.filter((t) => t.status === "done").length || 0;
-  const inProgressCount = data?.tasks.filter((t) => t.status === "in_progress").length || 0;
-  const pendingCount = data?.tasks.filter((t) => t.status === "pending").length || 0;
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
 
-  // Group tasks by phase
-  const phases = data?.tasks.reduce<Record<string, Task[]>>((acc, t) => {
+    recognitionRef.current = recognition;
+  }, []);
+
+  const sendMessage = useCallback(async (text?: string) => {
+    const msg = text ?? input.trim();
+    if (!msg || isStreaming) return;
+
+    // Cancel any ongoing stream
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: msg,
+      createdAt: new Date(),
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setIsStreaming(true);
+    setStreamingContent("");
+
+    abortRef.current = new AbortController();
+
+    try {
+      const res = await fetch("http://localhost:8080/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+        signal: abortRef.current.signal,
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let fullResponse = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        try {
+          const parsed = JSON.parse(chunk);
+          if (parsed.response) {
+            fullResponse += parsed.response;
+            setStreamingContent(fullResponse);
+          }
+        } catch {
+          fullResponse += chunk;
+          setStreamingContent(fullResponse);
+        }
+      }
+
+      const assistantMsg: ChatMessage = {
+        id: `asst-${Date.now()}`,
+        role: "assistant",
+        content: fullResponse,
+        createdAt: new Date(),
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        const errorMsg: ChatMessage = {
+          id: `err-${Date.now()}`,
+          role: "assistant",
+          content: `Connection error: ${err.message}. Make sure JARVIS Core is running on port 8080.`,
+          createdAt: new Date(),
+        };
+        setMessages(prev => [...prev, errorMsg]);
+      }
+    } finally {
+      setIsStreaming(false);
+      setStreamingContent("");
+      abortRef.current = null;
+    }
+  }, [input, isStreaming]);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const stopStreaming = () => {
+    if (abortRef.current) abortRef.current.abort();
+    setIsStreaming(false);
+    setStreamingContent("");
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 overscroll-none">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center px-8">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-cyan-500/20 flex items-center justify-center mb-4">
+              <span className="text-2xl">🤖</span>
+            </div>
+            <h2 className="text-base font-semibold text-white mb-1">JARVIS Online</h2>
+            <p className="text-xs text-slate-500 mb-6">
+              {jarvisOnline
+                ? "Ready to assist. Ask me anything about your smart home, projects, or system status."
+                : "JARVIS Core is offline on port 8080 — running it will connect us."}
+            </p>
+            {/* Quick suggestion chips */}
+            <div className="flex flex-wrap gap-2 justify-center">
+              {["What's the status of my smart home?", "Run the Brain Optimizer", "What errors have been logged?", "Show me recent commits"].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => sendMessage(s)}
+                  className="text-[11px] px-3 py-1.5 rounded-full border border-slate-700 text-slate-400 hover:border-cyan-500/40 hover:text-cyan-400 hover:bg-cyan-950/10 transition-all active:scale-95"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                msg.role === "user"
+                  ? "bg-cyan-600 text-white rounded-br-sm"
+                  : "bg-[#12121a] border border-[#2a2a3a] text-slate-200 rounded-bl-sm"
+              }`}
+            >
+              {msg.role === "assistant" && (
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-[10px] text-cyan-400 font-medium flex items-center gap-1">
+                    <Icon.Bot /> JARVIS
+                  </span>
+                </div>
+              )}
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+              <p
+                className={`text-[10px] mt-1.5 ${
+                  msg.role === "user" ? "text-cyan-200/60" : "text-slate-600"
+                }`}
+              >
+                {format(msg.createdAt, "HH:mm")}
+              </p>
+            </div>
+          </div>
+        ))}
+
+        {/* Streaming bubble */}
+        {isStreaming && streamingContent && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-3 bg-[#12121a] border border-[#2a2a3a]">
+              <p className="text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">{streamingContent}</p>
+              <span className="inline-block w-2 h-4 bg-cyan-400 animate-pulse ml-1 mt-1 rounded" />
+            </div>
+          </div>
+        )}
+
+        {/* Typing indicator */}
+        {isStreaming && !streamingContent && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-3 bg-[#12121a] border border-[#2a2a3a]">
+              <div className="flex gap-1">
+                {[0, 150, 300].map((delay) => (
+                  <span
+                    key={delay}
+                    className="w-2 h-2 rounded-full bg-cyan-400 animate-bounce"
+                    style={{ animationDelay: `${delay}ms` }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input bar */}
+      {isStreaming ? (
+        <div className="px-4 py-3">
+          <button
+            onClick={stopStreaming}
+            className="w-full py-3 rounded-2xl bg-red-950/30 border border-red-800/40 text-red-400 text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12"/>
+            </svg>
+            Stop
+          </button>
+        </div>
+      ) : (
+        <div className="px-4 py-3">
+          <div className="flex items-end gap-2 bg-[#12121a] border border-[#2a2a3a] rounded-2xl px-3 py-2">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Message JARVIS..."
+              rows={1}
+              className="flex-1 bg-transparent text-white text-sm placeholder-slate-600 resize-none outline-none max-h-32 py-1 leading-relaxed"
+              style={{ scrollbarWidth: "none" }}
+            />
+            {/* Mic button */}
+            <button
+              onClick={toggleListening}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all flex-shrink-0 ${
+                isListening
+                  ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse"
+                  : "text-slate-500 hover:text-slate-300"
+              }`}
+              title={isListening ? "Stop listening" : "Voice input"}
+            >
+              <Icon.Mic />
+            </button>
+            {/* Send button */}
+            <button
+              onClick={() => sendMessage()}
+              disabled={!input.trim()}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all flex-shrink-0 ${
+                input.trim()
+                  ? "bg-cyan-500 text-black"
+                  : "bg-slate-800 text-slate-600"
+              }`}
+            >
+              <Icon.Send />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Home Tab ─────────────────────────────────────────────────────────────────
+
+function HomeTab({ onRefresh, lastUpdate, loading }: { onRefresh: () => void; lastUpdate: Date | null; loading: boolean }) {
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [triggering, setTriggering] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    const [jc, ha, llm] = await Promise.all([
+      fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
+      fetch("http://10.0.0.7:8123/api/", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
+      fetch("http://10.0.0.49:8080/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
+    ]);
+    setSystemStatus({ jarvis_core: jc, ha, llm, uptime: 0 });
+
+    // Load tasks from TODO.md
+    try {
+      const res = await fetch("/api/read?path=" + encodeURIComponent("/root/jarvis-dev/TODO.md"));
+      if (res.ok) {
+        const text = await res.text();
+        const parsed: Task[] = [];
+        let currentPhase = "";
+        for (const line of text.split("\n")) {
+          if (line.startsWith("## ")) currentPhase = line.replace("## ", "");
+          if (line.match(/^- \[[x \>]?\]/)) {
+            const done = line.includes("[x]");
+            const inProg = line.includes("[>]");
+            const content = line.replace(/^-\s?\[[x \>]?\]/, "").trim().slice(0, 70);
+            parsed.push({
+              id: content.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 40),
+              content,
+              status: done ? "done" : inProg ? "in_progress" : "pending",
+              phase: currentPhase,
+            });
+          }
+        }
+        setTasks(parsed);
+      }
+    } catch {}
+  };
+
+  const triggerAction = async (id: string, endpoint: string, label: string) => {
+    setTriggering(id);
+    try {
+      await fetch(endpoint, { method: "POST" });
+    } catch {}
+    setTimeout(() => setTriggering(null), 3000);
+  };
+
+  const doneCount = tasks.filter(t => t.status === "done").length;
+  const inProgCount = tasks.filter(t => t.status === "in_progress").length;
+
+  return (
+    <div className="px-4 py-4 space-y-4 overflow-y-auto flex-1">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-base font-bold text-white">JARVIS</h1>
+          <p className="text-[11px] text-slate-500">
+            {lastUpdate ? `Updated ${format(lastUpdate, "HH:mm")}` : "Loading..."}
+          </p>
+        </div>
+        <button
+          onClick={() => { onRefresh(); loadData(); }}
+          disabled={loading}
+          className="w-9 h-9 rounded-xl border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white disabled:opacity-50 active:scale-95 transition-all"
+        >
+          <Icon.RefreshCw className={loading ? "animate-spin" : ""} />
+        </button>
+      </div>
+
+      {/* System Status Grid */}
+      <div>
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">System Status</h2>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { key: "jarvis_core", label: "Core", sub: "Port 8080", icon: <Icon.Cpu /> },
+            { key: "ha", label: "Home Asst", sub: "10.0.0.7", icon: <Icon.Server /> },
+            { key: "llm", label: "LLM Proxy", sub: "10.0.0.49", icon: <Icon.Zap /> },
+          ].map(({ key, label, sub, icon }) => {
+            const rawStatus = systemStatus?.[key as keyof SystemStatus];
+            const status: string = typeof rawStatus === "number" ? "unknown" : (rawStatus || "unknown");
+            return (
+              <div key={key} className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-3 text-center">
+                <div className="flex justify-center mb-1.5 text-slate-400">{icon}</div>
+                <div className="flex items-center justify-center gap-1 mb-0.5">
+                  <StatusDot status={status} />
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">{status}</span>
+                </div>
+                <p className="text-[10px] text-slate-300 font-medium">{label}</p>
+                <p className="text-[9px] text-slate-600">{sub}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div>
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">Quick Actions</h2>
+        <div className="space-y-1.5">
+          {[
+            { id: "jarvis", endpoint: "/api/trigger-jarvis", label: "Run Dev Engine", sub: "Process tasks & push commits", color: "cyan" },
+            { id: "brain", endpoint: "/api/trigger-brain", label: "Run Brain Optimizer", sub: "Analyze & improve", color: "violet" },
+            { id: "health", endpoint: "/api/health", label: "System Health Check", sub: "Check all services", color: "emerald" },
+          ].map(({ id, endpoint, label, sub, color }) => (
+            <button
+              key={id}
+              onClick={() => triggerAction(id, endpoint, label)}
+              disabled={!!triggering}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all active:scale-[0.98] ${
+                color === "cyan"
+                  ? "border-cyan-900/40 bg-cyan-950/10 hover:bg-cyan-950/20 text-cyan-400"
+                  : color === "violet"
+                  ? "border-violet-900/40 bg-violet-950/10 hover:bg-violet-950/20 text-violet-400"
+                  : "border-emerald-900/40 bg-emerald-950/10 hover:bg-emerald-950/20 text-emerald-400"
+              }`}
+            >
+              <span className={color === "cyan" ? "text-cyan-400" : color === "violet" ? "text-violet-400" : "text-emerald-400"}>
+                <Icon.Sparkles />
+              </span>
+              <div className="flex-1 text-left">
+                <p className="text-[13px] font-medium">
+                  {triggering === id ? "Running..." : label}
+                </p>
+                <p className="text-[10px] opacity-60">{sub}</p>
+              </div>
+              {triggering === id ? (
+                <Icon.RefreshCw className="animate-spin" />
+              ) : (
+                <Icon.ChevronRight />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Task Progress */}
+      <div>
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">Task Progress</h2>
+        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm text-white font-medium">{doneCount}/{tasks.length}</span>
+            <span className="text-[10px] text-slate-500">
+              {inProgCount > 0 && <span className="text-cyan-400 mr-2">{inProgCount} active</span>}
+              {doneCount} done
+            </span>
+          </div>
+          <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: tasks.length > 0 ? `${(doneCount / tasks.length) * 100}%` : "0%",
+                background: "linear-gradient(90deg, #00d4ff, #7c3aed)",
+              }}
+            />
+          </div>
+          {tasks.filter(t => t.status === "pending").slice(0, 3).map(t => (
+            <div key={t.id} className="flex items-center gap-2 mt-2 py-1.5 border-t border-slate-800/50">
+              <StatusDot status="pending" size={6} />
+              <span className="text-[12px] text-slate-400 truncate">{t.content}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tasks Tab ────────────────────────────────────────────────────────────────
+
+function TasksTab() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"all" | "done" | "pending">("all");
+
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  const loadTasks = async () => {
+    try {
+      const res = await fetch("/api/read?path=" + encodeURIComponent("/root/jarvis-dev/TODO.md"));
+      if (res.ok) {
+        const text = await res.text();
+        const parsed: Task[] = [];
+        let currentPhase = "";
+        for (const line of text.split("\n")) {
+          if (line.startsWith("## ")) currentPhase = line.replace("## ", "");
+          if (line.match(/^- \[[x \>]?\]/)) {
+            const done = line.includes("[x]");
+            const inProg = line.includes("[>]");
+            const content = line.replace(/^-\s?\[[x \>]?\]/, "").trim();
+            parsed.push({
+              id: content.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 40),
+              content,
+              status: done ? "done" : inProg ? "in_progress" : "pending",
+              phase: currentPhase,
+            });
+          }
+        }
+        setTasks(parsed);
+      }
+    } catch {}
+    setLoading(false);
+  };
+
+  const phases = tasks.reduce<Record<string, Task[]>>((acc, t) => {
     const p = t.phase || "Other";
     if (!acc[p]) acc[p] = [];
     acc[p].push(t);
     return acc;
-  }, {}) || {};
+  }, {});
+
+  const filteredTasks = filter === "all" ? tasks : tasks.filter(t => {
+    if (filter === "done") return t.status === "done";
+    if (filter === "pending") return t.status !== "done";
+    return true;
+  });
+
+  const doneCount = tasks.filter(t => t.status === "done").length;
+  const inProgCount = tasks.filter(t => t.status === "in_progress").length;
 
   return (
-    <div className="min-h-screen grid-bg">
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-50 bg-[#0a0a0f]/90 backdrop-blur-md border-b border-[#2a2a3a]">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-violet-600 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">J</span>
-              </div>
-              <div>
-                <h1 className="text-sm font-bold text-white jarvis-glow">JARVIS Control Panel</h1>
-                <p className="text-[10px] text-slate-500">Autonomous Development Dashboard</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              {/* System status dots */}
-              <div className="hidden md:flex items-center gap-3 text-[10px] text-slate-400">
-                {data?.system && (
-                  <>
-                    <span className="flex items-center gap-1.5"><StatusDot status={data.system.ha} />HA</span>
-                    <span className="flex items-center gap-1.5"><StatusDot status={data.system.jarvis_core} />Core</span>
-                    <span className="flex items-center gap-1.5"><StatusDot status={data.system.llm} />LLM</span>
-                    <span className="flex items-center gap-1.5"><StatusDot status={data.system.cron_engine} />Engine</span>
-                    <span className="flex items-center gap-1.5"><StatusDot status={data.system.brain_optimizer} />Brain</span>
-                  </>
-                )}
-              </div>
-
-              {/* Auto refresh */}
-              <button
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                className={`text-[10px] px-2 py-1 rounded border ${
-                  autoRefresh
-                    ? "border-cyan-500/30 bg-cyan-950/20 text-cyan-400"
-                    : "border-slate-700 text-slate-500"
-                }`}
-              >
-                {autoRefresh ? "Live" : "Paused"}
-              </button>
-
-              {/* Manual refresh */}
-              <button
-                onClick={load}
-                disabled={loading}
-                className="text-slate-400 hover:text-white disabled:opacity-50 transition-colors"
-              >
-                <Icon.RefreshCw className={loading ? "animate-spin" : ""} />
-              </button>
-
-              {/* Last update */}
-              {lastUpdate && (
-                <span className="text-[10px] text-slate-600 hidden sm:block">
-                  {format(lastUpdate, "HH:mm:ss")}
-                </span>
-              )}
-            </div>
-          </div>
+    <div className="px-4 py-4 flex-1 overflow-y-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-base font-bold text-white">Tasks</h1>
+          <p className="text-[11px] text-slate-500">{tasks.length} total · {doneCount} done</p>
         </div>
-      </header>
+        <button
+          onClick={loadTasks}
+          className="w-9 h-9 rounded-xl border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white active:scale-95 transition-all"
+        >
+          <Icon.RefreshCw />
+        </button>
+      </div>
 
-      {/* ── Main Content ── */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {error && (
-          <div className="mb-4 p-3 bg-red-950/30 border border-red-800/50 rounded-lg text-xs text-red-400">
-            Error loading data: {error}
-          </div>
+      {/* Filter chips */}
+      <div className="flex gap-1.5 mb-4">
+        {[
+          { id: "all" as const, label: `All ${tasks.length}` },
+          { id: "pending" as const, label: `Pending ${tasks.length - doneCount}` },
+          { id: "done" as const, label: `Done ${doneCount}` },
+        ].map(f => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            className={`text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all ${
+              filter === f.id
+                ? "bg-cyan-500 text-black"
+                : "bg-[#12121a] border border-[#2a2a3a] text-slate-400"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        {inProgCount > 0 && (
+          <span className="text-[11px] px-3 py-1.5 rounded-lg bg-cyan-950/20 border border-cyan-500/20 text-cyan-400 flex items-center gap-1">
+            <StatusDot status="in_progress" />
+            {inProgCount} active
+          </span>
         )}
+      </div>
 
-        {/* ── Stats Row ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <StatCard label="Tasks Done" value={doneCount} sub={`of ${data?.tasks.length || 0} total`} icon={<Icon.CheckCircle />} />
-          <StatCard label="In Progress" value={inProgressCount} sub="active right now" icon={<Icon.Activity />} />
-          <StatCard label="Sessions Archived" value={data?.uptime.sessions_archived || 0} sub="brain optimizer cycles" icon={<Icon.Brain />} />
-          <StatCard label="Errors Logged" value={data?.uptime.errors_fixed || 0} sub="in error registry" icon={<Icon.AlertCircle />} />
+      {/* Progress bar */}
+      <div className="mb-4 bg-[#12121a] border border-[#2a2a3a] rounded-xl p-3">
+        <div className="flex justify-between text-[11px] mb-1.5">
+          <span className="text-slate-400">Overall progress</span>
+          <span className="text-white font-medium">
+            {tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0}%
+          </span>
         </div>
+        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: tasks.length > 0 ? `${(doneCount / tasks.length) * 100}%` : "0%",
+              background: "linear-gradient(90deg, #00d4ff, #7c3aed)",
+            }}
+          />
+        </div>
+      </div>
 
-        {/* ── Tab Navigation ── */}
-        <div className="flex gap-1 mb-4 border-b border-[#2a2a3a]">
-          {[
-            { id: "tasks" as const, label: "Task Backlog", icon: <Icon.CheckCircle /> },
-            { id: "brain" as const, label: "Brain Optimizer", icon: <Icon.Brain /> },
-            { id: "dev" as const, label: "Dev Engine", icon: <Icon.Terminal /> },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? "border-cyan-400 text-cyan-400"
-                  : "border-transparent text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
+      {/* Task list */}
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-14 bg-[#12121a] border border-[#2a2a3a] rounded-xl animate-pulse" />
           ))}
         </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(phases).map(([phase, phaseTasks]) => {
+            const filtered = phaseTasks.filter(t => {
+              if (filter === "done") return t.status === "done";
+              if (filter === "pending") return t.status !== "done";
+              return true;
+            });
+            if (filtered.length === 0) return null;
+            const phaseDone = filtered.filter(t => t.status === "done").length;
 
-        {/* ── Tasks Tab ── */}
-        {activeTab === "tasks" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Task list — full width or left column */}
-            <div className="lg:col-span-2 bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <Icon.CheckCircle /> Task Backlog
-                </h2>
-                <div className="flex gap-2 text-[10px]">
-                  <span className="text-emerald-400">{doneCount} done</span>
-                  <span className="text-cyan-400">{inProgressCount} active</span>
-                  <span className="text-slate-500">{pendingCount} pending</span>
+            return (
+              <div key={phase}>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">{phase}</h3>
+                  <span className="text-[10px] text-slate-600">{phaseDone}/{filtered.length}</span>
                 </div>
-              </div>
-
-              {loading && !data ? (
-                <div className="space-y-2">
-                  {[1,2,3].map((i) => (
-                    <div key={i} className="h-8 skeleton rounded" />
-                  ))}
-                </div>
-              ) : (
-                <div className="max-h-[600px] overflow-y-auto pr-1">
-                  {Object.entries(phases).map(([phase, tasks]) => (
-                    <PhaseGroup key={phase} phase={phase} tasks={tasks} />
-                  ))}
-                  {Object.keys(phases).length === 0 && (
-                    <p className="text-slate-500 text-xs text-center py-8">No tasks loaded</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Right sidebar */}
-            <div className="space-y-4">
-              {/* Skill Gaps */}
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.Lightbulb /> Skill Suggestions
-                  {data?.skill_gaps && data.skill_gaps.length > 0 && (
-                    <span className="text-[10px] bg-yellow-900/30 text-yellow-400 px-1.5 py-0.5 rounded">
-                      {data.skill_gaps.length}
-                    </span>
-                  )}
-                </h2>
-                <div className="space-y-2">
-                  {data?.skill_gaps && data.skill_gaps.length > 0 ? (
-                    data.skill_gaps.slice(0, 4).map((gap, i) => (
-                      <SkillGapCard key={i} gap={gap} />
-                    ))
-                  ) : (
-                    <p className="text-[11px] text-slate-500 text-center py-4">No skill gaps detected</p>
-                  )}
-                </div>
-                {data?.skill_gaps && data.skill_gaps.length > 4 && (
-                  <p className="text-[10px] text-slate-600 mt-2 text-center">
-                    +{data.skill_gaps.length - 4} more in /journal/skills/
-                  </p>
-                )}
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.Zap /> Quick Actions
-                </h2>
                 <div className="space-y-1.5">
-                  <QuickAction href="/api/trigger-jarvis" label="Run JARVIS Dev Engine" icon={<Icon.Play />} color="cyan" />
-                  <QuickAction href="/api/trigger-brain" label="Run Brain Optimizer" icon={<Icon.Brain />} color="violet" />
-                  <QuickAction href="/api/health" label="Check System Health" icon={<Icon.Server />} color="emerald" />
-                  <QuickAction href="https://github.com/Zebratic/jarvis-core" label="Open GitHub Repo" icon={<Icon.GitBranch />} color="gray" external />
-                </div>
-              </div>
-
-              {/* Help Zeb */}
-              <div className="bg-gradient-to-br from-violet-950/40 to-cyan-950/40 border border-violet-800/30 rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
-                  <Icon.MessageSquare /> Help Needed
-                </h2>
-                <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
-                  Zeb — here's where I need your input right now:
-                </p>
-                <div className="space-y-2">
-                  {data?.skill_gaps?.filter(g => g.priority === "high").slice(0, 2).map((gap, i) => (
-                    <div key={i} className="bg-black/20 rounded p-2">
-                      <p className="text-[11px] font-medium text-violet-300">{gap.topic}</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">{gap.suggestion.slice(0, 80)}…</p>
-                    </div>
-                  )) || (
-                    <p className="text-[11px] text-slate-500">Nothing urgent — I'll keep building</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Brain Optimizer Tab ── */}
-        {activeTab === "brain" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 space-y-4">
-              {/* Activity Log */}
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Icon.Activity /> Live Activity Log
-                  </h2>
-                  <span className="text-[10px] text-slate-500">Last 30 entries</span>
-                </div>
-                <div className="h-[400px] overflow-y-auto bg-[#0a0a0f] rounded-lg p-3 space-y-0.5">
-                  {data?.activity && data.activity.length > 0 ? (
-                    data.activity.map((entry, i) => <LogLine key={i} entry={entry} />)
-                  ) : (
-                    <p className="text-slate-600 text-[11px]">No activity yet</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Errors Registry */}
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.AlertCircle /> Error Registry
-                </h2>
-                <div className="max-h-[200px] overflow-y-auto">
-                  <p className="text-[11px] text-slate-500">
-                    {data?.uptime.errors_fixed || 0} errors logged. Full registry at:<br />
-                    <code className="text-cyan-400/60">/root/brain-optimizer/journal/insights/context/errors.md</code>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Brain Stats */}
-            <div className="space-y-4">
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.Brain /> Brain Stats
-                </h2>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Brain cycles run</span>
-                    <span className="text-sm font-mono text-white">{data?.uptime.brain || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Sessions archived</span>
-                    <span className="text-sm font-mono text-white">{data?.uptime.sessions_archived || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Errors in registry</span>
-                    <span className="text-sm font-mono text-white">{data?.uptime.errors_fixed || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Skill gaps found</span>
-                    <span className="text-sm font-mono text-white">{data?.skill_gaps?.length || 0}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.Sparkles /> Journal Files
-                </h2>
-                <div className="space-y-2 text-[11px]">
-                  {[
-                    { path: "/root/brain-optimizer/journal/sessions/", desc: "Session archives" },
-                    { path: "/root/brain-optimizer/journal/insights/context/errors.md", desc: "Error registry" },
-                    { path: "/root/brain-optimizer/journal/insights/context/patterns.md", desc: "Patterns" },
-                    { path: "/root/brain-optimizer/journal/skills/_suggestions_master.md", desc: "Skill gaps" },
-                    { path: "/root/brain-optimizer/journal/insights/context/todo-progress.md", desc: "TODO tracker" },
-                    { path: "/root/brain-optimizer/brain.log", desc: "Activity log" },
-                  ].map((f) => (
-                    <div key={f.path} className="flex items-center justify-between py-1 border-b border-slate-800/30 last:border-0">
-                      <span className="text-slate-400">{f.desc}</span>
-                      <span className="text-slate-600 font-mono text-[10px] truncate ml-2 max-w-[160px]">{f.path}</span>
+                  {filtered.map(task => (
+                    <div
+                      key={task.id}
+                      className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border transition-all ${
+                        task.status === "done"
+                          ? "bg-emerald-950/5 border-emerald-900/20"
+                          : task.status === "in_progress"
+                          ? "bg-cyan-950/10 border-cyan-900/30"
+                          : "bg-[#12121a] border-[#2a2a3a]"
+                      }`}
+                    >
+                      <div className="mt-0.5 flex-shrink-0">
+                        <StatusDot status={task.status} size={8} />
+                      </div>
+                      <p className={`text-[13px] leading-relaxed flex-1 ${
+                        task.status === "done" ? "text-slate-600 line-through" : "text-slate-200"
+                      }`}>
+                        {task.content}
+                      </p>
+                      {task.status === "in_progress" && (
+                        <span className="text-[9px] bg-cyan-950/30 text-cyan-400 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
+                          ACTIVE
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
+            );
+          })}
+          {filteredTasks.length === 0 && (
+            <div className="text-center py-12 text-slate-500 text-sm">
+              No tasks in this filter
             </div>
-          </div>
-        )}
-
-        {/* ── Dev Engine Tab ── */}
-        {activeTab === "dev" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 space-y-4">
-              {/* Recent Commits */}
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.GitCommit /> Recent Commits
-                </h2>
-                <div className="space-y-0">
-                  {data?.commits && data.commits.length > 0 ? (
-                    data.commits.slice(0, 15).map((c, i) => <CommitItem key={i} entry={c} />)
-                  ) : (
-                    <p className="text-[11px] text-slate-500">No commits yet</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Project Structure */}
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.Server /> Project Structure
-                </h2>
-                <div className="font-mono text-[11px] text-slate-400 space-y-1">
-                  <TreeLine label="jarvis-core/" indent={0} color="cyan" />
-                  <TreeLine label="├── api/" indent={1} />
-                  <TreeLine label="│   └── main.py (FastAPI)" indent={2} />
-                  <TreeLine label="├── llm/" indent={1} />
-                  <TreeLine label="│   └── base.py (providers)" indent={2} />
-                  <TreeLine label="├── ha/" indent={1} />
-                  <TreeLine label="│   └── client.py (HA client)" indent={2} />
-                  <TreeLine label="├── voice/ (Phase 2)" indent={1} color="violet" />
-                  <TreeLine label="├── skills/" indent={1} />
-                  <TreeLine label="├── Dockerfile" indent={1} />
-                  <TreeLine label="├── docker-compose.yml" indent={1} />
-                  <TreeLine label="└── README.md" indent={1} />
-                  <div className="mt-2 pt-2 border-t border-slate-800">
-                    <TreeLine label="jarvis-device/ (planned)" indent={0} color="violet" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Dev Stats */}
-            <div className="space-y-4">
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.Zap /> Dev Engine Stats
-                </h2>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Engine cycles</span>
-                    <span className="text-sm font-mono text-white">{data?.uptime.jarvis || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Brain cycles</span>
-                    <span className="text-sm font-mono text-violet-400">{data?.uptime.brain || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">JARVIS cron</span>
-                    <span className="text-sm font-mono text-cyan-400">hourly</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-400">Brain cron</span>
-                    <span className="text-sm font-mono text-violet-400">every 6h</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-                  <Icon.Cpu /> Key Files
-                </h2>
-                <div className="space-y-2 text-[11px]">
-                  {[
-                    { label: "TODO", path: "/root/jarvis-dev/TODO.md" },
-                    { label: "Roadmap", path: "/root/JARVIS_ROADMAP.md" },
-                    { label: "Agent Context", path: "/root/jarvis-dev/AGENT_CONTEXT.md" },
-                    { label: "Jarvis Core API", path: "/root/jarvis-dev/jarvis-core/api/main.py" },
-                    { label: "LLM Layer", path: "/root/jarvis-dev/jarvis-core/llm/base.py" },
-                    { label: "HA Client", path: "/root/jarvis-dev/jarvis-core/ha/client.py" },
-                  ].map((f) => (
-                    <div key={f.path} className="flex items-center justify-between py-1 border-b border-slate-800/30 last:border-0">
-                      <span className="text-slate-400">{f.label}</span>
-                      <span className="text-slate-600 font-mono text-[10px] truncate ml-2 max-w-[160px]">{f.path}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Next priorities */}
-              <div className="bg-[#12121a] border border-cyan-800/30 rounded-xl p-4">
-                <h2 className="text-sm font-semibold text-cyan-300 flex items-center gap-2 mb-3">
-                  <Icon.TrendingUp /> Next Priorities
-                </h2>
-                <ol className="space-y-2 text-[11px] text-slate-400 list-decimal list-inside">
-                  <li>Sessions management (SQLite)</li>
-                  <li>LLM tool calling (structured output)</li>
-                  <li>Rich context builder</li>
-                  <li>Voice pipeline (STT/TTS)</li>
-                  <li>Web dashboard UI</li>
-                </ol>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function QuickAction({ href, label, icon, color, external }: {
-  href: string; label: string; icon: React.ReactNode; color: string; external?: boolean;
-}) {
-  const colorMap: Record<string, string> = {
-    cyan: "border-cyan-800/30 hover:border-cyan-600/50 text-cyan-400 hover:bg-cyan-950/20",
-    violet: "border-violet-800/30 hover:border-violet-600/50 text-violet-400 hover:bg-violet-950/20",
-    emerald: "border-emerald-800/30 hover:border-emerald-600/50 text-emerald-400 hover:bg-emerald-950/20",
-    gray: "border-slate-700 hover:border-slate-600 text-slate-400 hover:bg-slate-900/20",
-  };
-  const content = (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors ${colorMap[color]}`}>
-      {icon}
-      {label}
-      {external && <span className="ml-auto text-slate-600">↗</span>}
-    </div>
-  );
-  if (external) {
-    return <a href={href} target="_blank" rel="noopener noreferrer">{content}</a>;
-  }
-  return <button onClick={() => fetch(href).catch(() => {})}>{content}</button>;
-}
+// ─── Settings Tab ─────────────────────────────────────────────────────────────
 
-function TreeLine({ label, indent, color }: { label: string; indent: number; color?: string }) {
-  const indentPad = "    ".repeat(indent);
-  const textColor = color === "cyan" ? "text-cyan-400" : color === "violet" ? "text-violet-400" : "text-slate-400";
+function SettingsTab() {
+  const [jarvisOnline, setJarvisOnline] = useState(false);
+  const [haOnline, setHaOnline] = useState(false);
+  const [llmOnline, setLlmOnline] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(30);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
+      fetch("http://10.0.0.7:8123/api/", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
+      fetch("http://10.0.0.49:8080/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
+    ]).then(([jc, ha, llm]) => {
+      setJarvisOnline(jc);
+      setHaOnline(ha);
+      setLlmOnline(llm);
+    });
+  }, []);
+
   return (
-    <div className={`${indentPad}${textColor}`}>
-      {indent > 0 && <span className="text-slate-700 mr-1">│</span>} {label}
+    <div className="px-4 py-4 flex-1 overflow-y-auto space-y-4">
+      <h1 className="text-base font-bold text-white">Settings</h1>
+
+      {/* Service Endpoints */}
+      <div>
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">Service Endpoints</h2>
+        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
+          {[
+            { label: "JARVIS Core", sub: "localhost:8080", status: jarvisOnline },
+            { label: "Home Assistant", sub: "10.0.0.7:8123", status: haOnline },
+            { label: "LLM Proxy", sub: "10.0.0.49:8080", status: llmOnline },
+          ].map(({ label, sub, status }, i, arr) => (
+            <div
+              key={label}
+              className={`flex items-center gap-3 px-4 py-3 ${
+                i < arr.length - 1 ? "border-b border-[#2a2a3a]/50" : ""
+              }`}
+            >
+              <StatusDot status={status ? "online" : "offline"} />
+              <div className="flex-1">
+                <p className="text-[13px] text-white font-medium">{label}</p>
+                <p className="text-[10px] text-slate-600">{sub}</p>
+              </div>
+              <span className={`text-[10px] font-medium ${
+                status ? "text-emerald-400" : "text-red-400"
+              }`}>
+                {status ? "ONLINE" : "OFFLINE"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* App Info */}
+      <div>
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">About</h2>
+        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden divide-y divide-[#2a2a3a]/50">
+          {[
+            { label: "App", value: "JARVIS Control Panel" },
+            { label: "Version", value: "1.0.0" },
+            { label: "PWA", value: "Enabled" },
+            { label: "Speech", value: "Web Speech API" },
+            { label: "Speech Speed", value: "1.0x" },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex items-center justify-between px-4 py-2.5">
+              <span className="text-[12px] text-slate-400">{label}</span>
+              <span className="text-[12px] text-white">{value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* External Links */}
+      <div>
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">Links</h2>
+        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
+          {[
+            { label: "Home Assistant", href: "http://10.0.0.7:8123" },
+            { label: "LLM Proxy Admin", href: "http://10.0.0.49:3001" },
+            { label: "GitHub (jarvis-core)", href: "https://github.com/amolberg/jarvis-core" },
+            { label: "Brain Optimizer", href: "file:///root/brain-optimizer" },
+          ].map(({ label, href }, i, arr) => (
+            <a
+              key={label}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center justify-between px-4 py-3 text-[13px] text-slate-300 hover:text-white hover:bg-[#1a1a26] transition-colors ${
+                i < arr.length - 1 ? "border-b border-[#2a2a3a]/50" : ""
+              }`}
+            >
+              <span>{label}</span>
+              <Icon.ChevronRight />
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {/* PWA install hint */}
+      <div className="bg-gradient-to-r from-cyan-950/20 to-violet-950/20 border border-cyan-800/20 rounded-xl p-4">
+        <p className="text-[12px] text-slate-300 mb-1 font-medium">Install as App</p>
+        <p className="text-[11px] text-slate-500">Add to home screen for full-screen, app-like experience with offline support.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Bottom Tab Bar ───────────────────────────────────────────────────────────
+
+type Tab = "chat" | "home" | "tasks" | "settings";
+
+function BottomTabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
+  const tabs = [
+    { id: "chat" as const, label: "Chat", icon: Icon.Chat },
+    { id: "home" as const, label: "Home", icon: Icon.Home },
+    { id: "tasks" as const, label: "Tasks", icon: Icon.CheckSquare },
+    { id: "settings" as const, label: "Settings", icon: Icon.Settings },
+  ];
+
+  return (
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 8px)" }}
+    >
+      <div className="flex items-center justify-around bg-[#0a0a0f]/95 backdrop-blur-md border-t border-[#2a2a3a] px-2 py-2">
+        {tabs.map(({ id, label, icon: IconComp }) => {
+          const isActive = active === id;
+          return (
+            <button
+              key={id}
+              onClick={() => onChange(id)}
+              className={`flex flex-col items-center justify-center gap-0.5 px-4 py-1.5 rounded-xl transition-all flex-1 ${
+                isActive
+                  ? "text-cyan-400"
+                  : "text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              <IconComp />
+              <span className="text-[10px] font-medium">{label}</span>
+              {isActive && (
+                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-cyan-400" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+// ─── Top Bar ─────────────────────────────────────────────────────────────────
+
+function TopBar({ jarvisOnline }: { jarvisOnline: boolean }) {
+  return (
+    <div
+      className="sticky top-0 z-40 px-4 py-3 backdrop-blur-md"
+      style={{ background: "rgba(10,10,15,0.9)" }}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 flex items-center justify-center flex-shrink-0">
+          <span className="text-white font-bold text-sm">J</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-sm font-bold text-white jarvis-glow truncate">JARVIS</h1>
+        </div>
+        <div className="flex items-center gap-1.5 bg-[#12121a] border border-[#2a2a3a] rounded-full px-3 py-1">
+          <StatusDot status={jarvisOnline ? "online" : "offline"} />
+          <span className="text-[10px] text-slate-400 font-medium">
+            {jarvisOnline ? "ONLINE" : "OFFLINE"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
+export default function JarvisDashboard() {
+  const [activeTab, setActiveTab] = useState<Tab>("chat");
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [jarvisOnline, setJarvisOnline] = useState(false);
+
+  useEffect(() => {
+    fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) })
+      .then(r => setJarvisOnline(r.ok))
+      .catch(() => setJarvisOnline(false));
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setLoading(true);
+    setLastUpdate(new Date());
+    setTimeout(() => setLoading(false), 1000);
+  }, []);
+
+  return (
+    <div className="flex flex-col h-screen bg-[#0a0a0f] overflow-hidden">
+      {/* Top bar — only show on non-chat tabs */}
+      {activeTab !== "chat" && (
+        <TopBar jarvisOnline={jarvisOnline} />
+      )}
+
+      {/* Content area — scrollable */}
+      <div className="flex-1 overflow-y-auto content-pad-bottom">
+        {activeTab === "chat" && <ChatTab />}
+        {activeTab === "home" && (
+          <HomeTab onRefresh={handleRefresh} lastUpdate={lastUpdate} loading={loading} />
+        )}
+        {activeTab === "tasks" && <TasksTab />}
+        {activeTab === "settings" && <SettingsTab />}
+      </div>
+
+      {/* Bottom tab bar */}
+      <BottomTabBar active={activeTab} onChange={setActiveTab} />
     </div>
   );
 }

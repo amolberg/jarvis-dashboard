@@ -123,3 +123,48 @@ body {
     linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
 }
+
+/* Mobile-first: prevent overscroll bounce */
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  height: 100%;
+}
+
+/* Nav height — used to pad bottom of scrollable content */
+:root {
+  --nav-height: 72px;
+}
+
+/* Safe area for notched phones — extend bottom padding for tab nav */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .content-pad-bottom {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+.content-pad-bottom {
+  padding-bottom: 72px;
+}
+
+/* Touch target minimum */
+button, a, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Smooth transitions for mobile */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Remove tap highlight on mobile */
+input, textarea {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Better scroll on iOS */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+}
