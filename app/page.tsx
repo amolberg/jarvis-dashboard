@@ -1122,14 +1122,246 @@ function SettingsTab() {
   );
 }
 
+// ─── Activity Tab ──────────────────────────────────────────────────────────────
+
+interface ActivityItem {
+  id: number;
+  session_id: string;
+  session_title: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: string;
+  model: string | null;
+  provider: string | null;
+  tool_calls?: object[] | null;
+  tool_results?: object[] | null;
+}
+
+function ActivityTab() {
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "user" | "assistant">("all");
+  const [jarvisOnline, setJarvisOnline] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  const loadActivity = useCallback(async () => {
+    if (!jarvisOnline) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("http://localhost:8080/api/activity?limit=100");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: ActivityItem[] = await res.json();
+      setActivities(data);
+    } catch (err: any) {
+      setError(err.message || "Failed to load activity");
+    } finally {
+      setLoading(false);
+    }
+  }, [jarvisOnline]);
+
+  // Check JARVIS online status
+  useEffect(() => {
+    fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) })
+      .then(r => setJarvisOnline(r.ok))
+      .catch(() => setJarvisOnline(false));
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    if (jarvisOnline) loadActivity();
+  }, [jarvisOnline, loadActivity]);
+
+  // Auto-refresh every 15s when enabled
+  useEffect(() => {
+    if (!autoRefresh || !jarvisOnline) return;
+    const interval = setInterval(loadActivity, 15000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, jarvisOnline, loadActivity]);
+
+  const filtered = filter === "all"
+    ? activities
+    : activities.filter(a => a.role === filter);
+
+  const groupByDate = (items: ActivityItem[]) => {
+    const groups: Record<string, ActivityItem[]> = {};
+    for (const item of items) {
+      const d = new Date(item.timestamp);
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      let label: string;
+      if (d.toDateString() === today.toDateString()) label = "Today";
+      else if (d.toDateString() === yesterday.toDateString()) label = "Yesterday";
+      else label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(item);
+    }
+    return groups;
+  };
+
+  const groups = groupByDate(filtered);
+
+  const timeAgo = (ts: string) => {
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  };
+
+  return (
+    <div className="px-4 py-4 flex-1 overflow-y-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-sm font-bold text-white">Activity Log</h2>
+          <p className="text-[11px] text-slate-500">
+            {jarvisOnline ? `${activities.length} events loaded` : "JARVIS offline"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadActivity}
+            disabled={loading}
+            className="w-8 h-8 rounded-xl border border-slate-700 flex items-center justify-center text-slate-400 hover:text-white disabled:opacity-50 active:scale-95 transition-all"
+          >
+            <Icon.RefreshCw className={loading ? "animate-spin" : ""} />
+          </button>
+          <button
+            onClick={() => setAutoRefresh(v => !v)}
+            className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all active:scale-95 ${
+              autoRefresh
+                ? "bg-cyan-950/30 border-cyan-700/50 text-cyan-400"
+                : "border-slate-700 text-slate-500 hover:text-slate-300"
+            }`}
+            title="Auto-refresh every 15s"
+          >
+            <Icon.Activity />
+          </button>
+        </div>
+      </div>
+
+      {/* Offline state */}
+      {!jarvisOnline && (
+        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-2xl p-8 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-3">
+            <Icon.AlertCircle />
+          </div>
+          <p className="text-sm text-slate-400 mb-1">JARVIS Core is offline</p>
+          <p className="text-[11px] text-slate-600">Connect to port 8080 to see activity</p>
+        </div>
+      )}
+
+      {/* Filter chips */}
+      {jarvisOnline && (
+        <div className="flex gap-2 mb-4">
+          {(["all", "user", "assistant"] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`text-[11px] px-3 py-1.5 rounded-full border transition-all ${
+                filter === f
+                  ? f === "user"
+                    ? "bg-cyan-950/30 border-cyan-700/50 text-cyan-400"
+                    : f === "assistant"
+                    ? "bg-violet-950/30 border-violet-700/50 text-violet-400"
+                    : "bg-slate-800 border-slate-600 text-slate-300"
+                  : "border-slate-700 text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              {f === "all" ? `All (${activities.length})` : f === "user" ? `User (${activities.filter(a => a.role === "user").length})` : `JARVIS (${activities.filter(a => a.role === "assistant").length})`}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && (
+        <div className="bg-red-950/20 border border-red-800/40 rounded-xl p-3 mb-4">
+          <p className="text-[11px] text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* Activity list */}
+      {jarvisOnline && filtered.length > 0 && Object.entries(groups).map(([date, items]) => (
+        <div key={date} className="mb-4">
+          <h3 className="text-[10px] uppercase tracking-wider text-slate-600 font-medium mb-2">{date}</h3>
+          <div className="space-y-2">
+            {items.map(item => {
+              const isUser = item.role === "user";
+              const hasTools = item.tool_calls && (item.tool_calls as any[]).length > 0;
+              return (
+                <div key={item.id} className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <StatusDot status={isUser ? "online" : "idle"} size={6} />
+                      <span className={`text-[10px] font-medium ${
+                        isUser ? "text-cyan-400" : "text-violet-400"
+                      }`}>
+                        {isUser ? "You" : "JARVIS"}
+                      </span>
+                      <span className="text-[10px] text-slate-600">·</span>
+                      <span className="text-[10px] text-slate-600">{timeAgo(item.timestamp)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {hasTools && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-950/40 border border-amber-800/40 text-amber-400">
+                          ⚡ {(item.tool_calls as any[]).length} tools
+                        </span>
+                      )}
+                      {item.provider && (
+                        <span className="text-[9px] text-slate-600">{item.provider}</span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[12px] text-slate-300 leading-relaxed line-clamp-3">
+                    {item.content}
+                  </p>
+                  {hasTools && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {(item.tool_calls as any[]).map((tc: any, i: number) => (
+                        <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-amber-950/20 border border-amber-900/30 text-amber-500/80">
+                          {tc.name || tc.function?.name || "tool"}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {/* Empty state */}
+      {jarvisOnline && !loading && filtered.length === 0 && !error && (
+        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-2xl p-8 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-3">
+            <Icon.Activity />
+          </div>
+          <p className="text-sm text-slate-400 mb-1">No activity yet</p>
+          <p className="text-[11px] text-slate-600">Start chatting to see events here</p>
+        </div>
+      )}
+
+      <div className="h-8" />
+    </div>
+  );
+}
+
 // ─── Bottom Tab Bar ───────────────────────────────────────────────────────────
 
-type Tab = "chat" | "home" | "tasks" | "settings";
+type Tab = "chat" | "home" | "activity" | "tasks" | "settings";
 
 function BottomTabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs = [
     { id: "chat" as const, label: "Chat", icon: Icon.Chat },
     { id: "home" as const, label: "Home", icon: Icon.Home },
+    { id: "activity" as const, label: "Activity", icon: Icon.Activity },
     { id: "tasks" as const, label: "Tasks", icon: Icon.CheckSquare },
     { id: "settings" as const, label: "Settings", icon: Icon.Settings },
   ];
@@ -1224,6 +1456,7 @@ export default function JarvisDashboard() {
         {activeTab === "home" && (
           <HomeTab onRefresh={handleRefresh} lastUpdate={lastUpdate} loading={loading} />
         )}
+        {activeTab === "activity" && <ActivityTab />}
         {activeTab === "tasks" && <TasksTab />}
         {activeTab === "settings" && <SettingsTab />}
       </div>
