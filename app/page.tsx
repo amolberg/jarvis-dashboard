@@ -1499,6 +1499,9 @@ function SettingsTab() {
         </div>
       </div>
 
+      {/* Voice Settings */}
+      <VoiceSettingsSection />
+
       {/* App Info */}
       <div>
         <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">About</h2>
@@ -1517,6 +1520,9 @@ function SettingsTab() {
           ))}
         </div>
       </div>
+
+      {/* Voice Settings */}
+      <VoiceSettingsSection />
 
       {/* External Links */}
       <div>
@@ -1548,6 +1554,256 @@ function SettingsTab() {
       <div className="bg-gradient-to-r from-cyan-950/20 to-violet-950/20 border border-cyan-800/20 rounded-xl p-4">
         <p className="text-[12px] text-slate-300 mb-1 font-medium">Install as App</p>
         <p className="text-[11px] text-slate-500">Add to home screen for full-screen, app-like experience with offline support.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Voice Settings ──────────────────────────────────────────────────────────
+
+interface VoiceConfig {
+  wake_word: string;
+  wake_word_enabled: boolean;
+  wake_word_sensitivity: number;
+  stt_provider: string;
+  stt_model: string;
+  tts_provider: string;
+  tts_voice: string;
+  tts_speed: number;
+}
+
+function VoiceSettingsSection() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [wakeWord, setWakeWord] = useState("jarvis");
+  const [wakeEnabled, setWakeEnabled] = useState(false);
+  const [sensitivity, setSensitivity] = useState(0.5);
+  const [ttsProvider, setTtsProvider] = useState("elevenlabs");
+  const [ttsVoice, setTtsVoice] = useState("rachel");
+  const [ttsSpeed, setTtsSpeed] = useState(1.0);
+
+  useEffect(() => {
+    fetch("http://localhost:8080/api/config/voice", { signal: AbortSignal.timeout(5000) })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: VoiceConfig | null) => {
+        if (data) {
+          setWakeWord(data.wake_word);
+          setWakeEnabled(data.wake_word_enabled);
+          setSensitivity(data.wake_word_sensitivity);
+          setTtsProvider(data.tts_provider);
+          setTtsVoice(data.tts_voice);
+          setTtsSpeed(data.tts_speed);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setSaved(false);
+    setError(null);
+    try {
+      const res = await fetch("http://localhost:8080/api/config/voice", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wake_word: wakeWord,
+          wake_word_enabled: wakeEnabled,
+          wake_word_sensitivity: sensitivity,
+          tts_provider: ttsProvider,
+          tts_voice: ttsVoice,
+          tts_speed: ttsSpeed,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const presets = [
+    { label: "Hey Jarvis", value: "jarvis" },
+    { label: "Hey Friday", value: "friday" },
+    { label: "Hey JARVIS", value: "JARVIS" },
+    { label: "Okay Computer", value: "computer" },
+  ];
+
+  const ttsPresets = [
+    { label: "ElevenLabs", value: "elevenlabs" },
+    { label: "Piper (local)", value: "piper" },
+    { label: "OpenAI TTS", value: "openai" },
+  ];
+
+  const voicePresets: Record<string, { label: string; value: string }[]> = {
+    elevenlabs: [
+      { label: "Rachel", value: "rachel" },
+      { label: "Domi", value: "domi" },
+      { label: "Nicole", value: "nicole" },
+      { label: "Patrick", value: "patrick" },
+      { label: "Matthew", value: "matthew" },
+    ],
+    piper: [
+      { label: "Lessac (neutral)", value: "en_US-lessac-medium" },
+      { label: "Amy (female)", value: "en_US-amy-medium" },
+      { label: "Cori (male)", value: "en_GB-cori-medium" },
+    ],
+    openai: [
+      { label: "Alloy", value: "alloy" },
+      { label: "Nova", value: "nova" },
+      { label: "Echo", value: "echo" },
+      { label: "Fable", value: "fable" },
+    ],
+  };
+
+  if (loading) return null;
+
+  return (
+    <div>
+      <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">Voice &amp; Wake Word</h2>
+      <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
+
+        {/* Wake Word */}
+        <div className="px-4 py-3 border-b border-[#2a2a3a]/50">
+          <p className="text-[13px] text-white font-medium mb-2">Wake Word</p>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {presets.map(p => (
+              <button
+                key={p.value}
+                onClick={() => setWakeWord(p.value)}
+                className={`text-[10px] px-2.5 py-1 rounded-lg border transition-colors ${
+                  wakeWord === p.value
+                    ? "border-cyan-500/50 bg-cyan-950/20 text-cyan-400"
+                    : "border-[#2a2a3a] text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            value={wakeWord}
+            onChange={e => setWakeWord(e.target.value)}
+            placeholder="e.g. jarvis, friday, computer"
+            className="w-full bg-[#1a1a26] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[13px] text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 transition-colors"
+          />
+        </div>
+
+        {/* Wake Word Toggle */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a3a]/50">
+          <div>
+            <p className="text-[13px] text-white font-medium">Wake Word Detection</p>
+            <p className="text-[10px] text-slate-600">Always listening (hardware mic required)</p>
+          </div>
+          <button
+            onClick={() => setWakeEnabled(!wakeEnabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              wakeEnabled ? "bg-cyan-500" : "bg-[#2a2a3a]"
+            }`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              wakeEnabled ? "translate-x-6" : "translate-x-1"
+            }`} />
+          </button>
+        </div>
+
+        {/* Sensitivity Slider */}
+        <div className="px-4 py-3 border-b border-[#2a2a3a]/50">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[13px] text-white font-medium">Wake Sensitivity</p>
+            <span className="text-[11px] text-cyan-400 font-medium">{Math.round(sensitivity * 100)}%</span>
+          </div>
+          <input
+            type="range" min="0.1" max="0.9" step="0.05"
+            value={sensitivity}
+            onChange={e => setSensitivity(parseFloat(e.target.value))}
+            className="w-full accent-cyan-500"
+          />
+          <div className="flex justify-between mt-1">
+            <span className="text-[9px] text-slate-600">Less sensitive</span>
+            <span className="text-[9px] text-slate-600">More sensitive</span>
+          </div>
+        </div>
+
+        {/* TTS Provider */}
+        <div className="px-4 py-3 border-b border-[#2a2a3a]/50">
+          <p className="text-[13px] text-white font-medium mb-2">TTS Provider</p>
+          <div className="flex gap-2">
+            {ttsPresets.map(p => (
+              <button
+                key={p.value}
+                onClick={() => { setTtsProvider(p.value); setTtsVoice(voicePresets[p.value]?.[0]?.value || ""); }}
+                className={`text-[11px] px-3 py-1.5 rounded-lg border transition-colors ${
+                  ttsProvider === p.value
+                    ? "border-violet-500/50 bg-violet-950/20 text-violet-400"
+                    : "border-[#2a2a3a] text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* TTS Voice */}
+        <div className="px-4 py-3 border-b border-[#2a2a3a]/50">
+          <p className="text-[13px] text-white font-medium mb-2">Voice</p>
+          <div className="flex flex-wrap gap-2">
+            {(voicePresets[ttsProvider] || []).map(v => (
+              <button
+                key={v.value}
+                onClick={() => setTtsVoice(v.value)}
+                className={`text-[11px] px-3 py-1.5 rounded-lg border transition-colors ${
+                  ttsVoice === v.value
+                    ? "border-violet-500/50 bg-violet-950/20 text-violet-400"
+                    : "border-[#2a2a3a] text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                }`}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* TTS Speed */}
+        <div className="px-4 py-3 border-b border-[#2a2a3a]/50">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[13px] text-white font-medium">Speech Speed</p>
+            <span className="text-[11px] text-cyan-400 font-medium">{ttsSpeed.toFixed(1)}x</span>
+          </div>
+          <input
+            type="range" min="0.5" max="2.0" step="0.1"
+            value={ttsSpeed}
+            onChange={e => setTtsSpeed(parseFloat(e.target.value))}
+            className="w-full accent-cyan-500"
+          />
+          <div className="flex justify-between mt-1">
+            <span className="text-[9px] text-slate-600">Slower</span>
+            <span className="text-[9px] text-slate-600">Faster</span>
+          </div>
+        </div>
+
+        {/* Save Button */}
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={save}
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 text-[13px] font-semibold text-white transition-colors"
+            >
+              {saving ? "Saving..." : saved ? "✓ Saved!" : "Save Voice Settings"}
+            </button>
+            {error && <span className="text-[11px] text-red-400">Failed</span>}
+          </div>
+        </div>
+
       </div>
     </div>
   );
