@@ -656,6 +656,178 @@ function HomeTab({ onRefresh, lastUpdate, loading }: { onRefresh: () => void; la
           ))}
         </div>
       </div>
+
+      {/* Scenes & Macros */}
+      <ScenesSection />
+    </div>
+  );
+}
+
+// ─── Scenes Section ────────────────────────────────────────────────────────────
+
+interface SceneEntity {
+  entity_id: string;
+  friendly_name: string;
+  domain: "scene" | "automation" | "script";
+  state: string;
+}
+
+function ScenesSection() {
+  const [entities, setEntities] = useState<SceneEntity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState<string | null>(null);
+  const [lastTriggered, setLastTriggered] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadEntities();
+  }, []);
+
+  const loadEntities = async () => {
+    setLoading(true);
+    try {
+      const [scenes, automations, scripts] = await Promise.all([
+        fetch("http://localhost:8080/api/devices?domain=scene").then(r => r.json()).catch(() => ({ entities: [] })),
+        fetch("http://localhost:8080/api/devices?domain=automation").then(r => r.json()).catch(() => ({ entities: [] })),
+        fetch("http://localhost:8080/api/devices?domain=script").then(r => r.json()).catch(() => ({ entities: [] })),
+      ]);
+      const all: SceneEntity[] = [
+        ...(scenes.entities || []),
+        ...(automations.entities || []),
+        ...(scripts.entities || []),
+      ].map(e => ({
+        entity_id: e.entity_id,
+        friendly_name: e.attributes?.friendly_name || e.friendly_name || e.entity_id,
+        domain: e.domain,
+        state: e.state,
+      })).filter(e => e.friendly_name && e.friendly_name !== e.entity_id);
+      setEntities(all);
+    } catch {}
+    setLoading(false);
+  };
+
+  const trigger = async (entity: SceneEntity) => {
+    setTriggering(entity.entity_id);
+    try {
+      const res = await fetch(`http://localhost:8080/api/devices/${entity.entity_id}/control`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "turn_on" }),
+      });
+      if (res.ok) {
+        setLastTriggered(entity.entity_id);
+        setTimeout(() => setLastTriggered(null), 3000);
+      }
+    } catch {}
+    setTriggering(null);
+  };
+
+  const domainColor = (domain: string) =>
+    domain === "scene" ? "amber" : domain === "automation" ? "violet" : "emerald";
+
+  const domainIcon = (domain: string) => {
+    if (domain === "scene") return "🎬";
+    if (domain === "automation") return "⚡";
+    return "📜";
+  };
+
+  const grouped = entities.reduce<Record<string, SceneEntity[]>>((acc, e) => {
+    const name = e.friendly_name;
+    const parts = name.split(/\s+/);
+    let group = "Other";
+    if (name.toLowerCase().includes("blomgreen")) group = "Blomgreen";
+    else if (name.toLowerCase().includes("stue") || name.toLowerCase().includes("living")) group = "Stue";
+    else if (name.toLowerCase().includes("kokken") || name.toLowerCase().includes("kitchen")) group = "Kokken";
+    else if (name.toLowerCase().includes("alex")) group = "Alex";
+    else if (name.toLowerCase().includes("gang") || name.toLowerCase().includes("hall")) group = "Gang";
+    else if (name.toLowerCase().includes("toilet") || name.toLowerCase().includes("bath")) group = "Toilet";
+    else if (name.toLowerCase().includes("all") || name.toLowerCase().includes("alt")) group = "All Rooms";
+    else if (name.toLowerCase().includes("movie") || name.toLowerCase().includes("film")) group = "Movie";
+    else if (name.toLowerCase().includes("night") || name.toLowerCase().includes("nightlight")) group = "Nightlight";
+    else if (name.toLowerCase().includes("read") || name.toLowerCase().includes("lys")) group = "Reading";
+    else if (name.toLowerCase().includes("rainbow") || name.toLowerCase().includes("color")) group = "Color";
+    else if (name.toLowerCase().includes("morning") || name.toLowerCase().includes("morgen")) group = "Morning";
+    else if (name.toLowerCase().includes("evening") || name.toLowerCase().includes("aften")) group = "Evening";
+    else if (name.toLowerCase().includes("camera")) group = "Camera";
+    else if (name.toLowerCase().includes("heat") || name.toLowerCase().includes("varm")) group = "Climate";
+    if (!acc[group]) acc[group] = [];
+    acc[group].push(e);
+    return acc;
+  }, {});
+
+  const domainBg = (domain: string) => {
+    if (domain === "scene") return "bg-amber-500/10 border-amber-500/20";
+    if (domain === "automation") return "bg-violet-500/10 border-violet-500/20";
+    return "bg-emerald-500/10 border-emerald-500/20";
+  };
+
+  const domainText = (domain: string) => {
+    if (domain === "scene") return "text-amber-400";
+    if (domain === "automation") return "text-violet-400";
+    return "text-emerald-400";
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Scenes & Macros</h2>
+        <button
+          onClick={loadEntities}
+          disabled={loading}
+          className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 disabled:opacity-50"
+        >
+          {loading ? "..." : "↻"} {entities.length}
+        </button>
+      </div>
+      {loading ? (
+        <div className="grid grid-cols-3 gap-2">
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} className="h-16 bg-[#12121a] border border-[#2a2a3a] rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {Object.entries(grouped).map(([group, items]) => (
+            <div key={group}>
+              <p className="text-[10px] text-slate-600 mb-1.5 uppercase tracking-wider">{group}</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {items.slice(0, 8).map(entity => {
+                  const isTriggering = triggering === entity.entity_id;
+                  const isTriggered = lastTriggered === entity.entity_id;
+                  return (
+                    <button
+                      key={entity.entity_id}
+                      onClick={() => trigger(entity)}
+                      disabled={!!triggering}
+                      className={`
+                        relative flex flex-col items-start px-3 py-2.5 rounded-xl border text-left
+                        transition-all active:scale-[0.97] overflow-hidden
+                        ${domainBg(entity.domain)}
+                        ${isTriggered ? "ring-1 ring-white/20" : ""}
+                        ${isTriggering ? "opacity-60" : ""}
+                      `}
+                    >
+                      <span className={`text-[10px] font-mono ${domainText(entity.domain)} opacity-60`}>
+                        {domainIcon(entity.domain)}
+                      </span>
+                      <span className="text-[12px] text-white font-medium leading-tight mt-0.5 line-clamp-2">
+                        {entity.friendly_name.replace(new RegExp(`^(${group}\\s*[-:]*\\s*|${group}\\s+)`,"i"), "")}
+                      </span>
+                      {isTriggering && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl">
+                          <span className="w-3 h-3 border border-white/60 border-t-transparent rounded-full animate-spin" />
+                        </span>
+                      )}
+                      {isTriggered && !isTriggering && (
+                        <span className="absolute top-1 right-1 text-[8px] text-white/80">✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
