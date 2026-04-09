@@ -664,6 +664,9 @@ function HomeTab({ onRefresh, lastUpdate, loading }: { onRefresh: () => void; la
       {/* Scenes & Macros */}
       <ScenesSection />
 
+      {/* Camera Feeds */}
+      <CameraSection />
+
       {/* Device Control */}
       <DeviceControlSection />
     </div>
@@ -2392,6 +2395,138 @@ function ActivityTab() {
       )}
 
       <div className="h-8" />
+    </div>
+  );
+}
+
+// ─── Camera Section ───────────────────────────────────────────────────────────
+
+interface CameraEntity {
+  entity_id: string;
+  friendly_name: string;
+  state: string;
+  available: boolean;
+  snapshot_url: string;
+}
+
+function CameraSection() {
+  const [cameras, setCameras] = useState<CameraEntity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    loadCameras();
+  }, []);
+
+  const loadCameras = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/jarvis-proxy/cameras");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setCameras(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setError(err.message || "Failed to load cameras");
+    }
+    setLoading(false);
+  };
+
+  const snapshotUrl = (camera: CameraEntity) => {
+    // The JARVIS Core /api/cameras returns snapshot_url as /api/cameras/{id}/snapshot
+    // We need to proxy it through our own /api/jarvis-proxy/cameras/{id}/snapshot
+    const entityId = encodeURIComponent(camera.entity_id);
+    return `/api/jarvis-proxy/cameras/${entityId}/snapshot?_=${refreshKey}`;
+  };
+
+  // Auto-refresh snapshots every 5s when cameras are present
+  useEffect(() => {
+    if (cameras.length === 0) return;
+    const interval = setInterval(() => setRefreshKey(k => k + 1), 5000);
+    return () => clearInterval(interval);
+  }, [cameras.length]);
+
+  if (loading && cameras.length === 0) {
+    return (
+      <div>
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">Camera Feeds</h2>
+        <div className="grid grid-cols-2 gap-2">
+          {[1, 2].map(i => (
+            <div key={i} className="aspect-video bg-[#12121a] border border-[#2a2a3a] rounded-xl animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error && cameras.length === 0) {
+    return (
+      <div>
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 font-medium">Camera Feeds</h2>
+        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-3">
+          <p className="text-[11px] text-red-400">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (cameras.length === 0) return null;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Camera Feeds</h2>
+        <button
+          onClick={() => setRefreshKey(k => k + 1)}
+          className="text-[10px] text-slate-500 hover:text-slate-300"
+        >
+          ↻
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {cameras.map(camera => {
+          const isExpanded = expanded === camera.entity_id;
+          return (
+            <button
+              key={camera.entity_id}
+              onClick={() => setExpanded(isExpanded ? null : camera.entity_id)}
+              className={`
+                relative rounded-xl overflow-hidden border transition-all active:scale-[0.98]
+                ${camera.available ? "border-[#2a2a3a] hover:border-[#3a3a4a]" : "border-red-900/30 opacity-60"}
+                ${isExpanded ? "col-span-2 row-span-1" : ""}
+              `}
+            >
+              <img
+                key={refreshKey}
+                src={snapshotUrl(camera)}
+                alt={camera.friendly_name}
+                className="w-full object-cover bg-[#0d0d14]"
+                style={{ aspectRatio: isExpanded ? "16/9" : "16/9", height: isExpanded ? "180px" : "100px" }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+              {/* Overlay */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5">
+                <p className="text-[10px] text-white font-medium truncate">{camera.friendly_name}</p>
+                <div className="flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${camera.available ? "bg-emerald-400" : "bg-red-400"}`} />
+                  <span className="text-[9px] text-white/60">{camera.available ? camera.state : "offline"}</span>
+                </div>
+              </div>
+              {/* Expand icon */}
+              <div className="absolute top-1.5 right-1.5">
+                <span className="text-[10px] bg-black/40 rounded px-1 py-0.5 text-white/60">
+                  {isExpanded ? "⊝" : "⊕"}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
