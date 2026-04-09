@@ -499,12 +499,16 @@ function HomeTab({ onRefresh, lastUpdate, loading }: { onRefresh: () => void; la
   }, []);
 
   const loadData = async () => {
-    const [jc, ha, llm] = await Promise.all([
-      fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
-      fetch("http://10.0.0.7:8123/api/", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
-      fetch("http://10.0.0.49:8080/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
+    // Fetch in parallel — system-status proxies HA/LLM checks server-side (bypasses CORS)
+    const [jcRes, ssRes] = await Promise.all([
+      fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(5000) }),
+      fetch("/api/system-status", { signal: AbortSignal.timeout(5000) }),
     ]);
-    setSystemStatus({ jarvis_core: jc, ha, llm, uptime: 0 });
+    const jc: "online" | "offline" = jcRes.ok ? "online" : "offline";
+    const systemStatus = ssRes.ok ? await ssRes.json() as { ha: string; llm: string } : null;
+    const haStatus: "online" | "offline" | "unknown" = systemStatus?.ha === "online" ? "online" : systemStatus?.ha === "offline" ? "offline" : "unknown";
+    const llmStatus: "online" | "offline" | "unknown" = systemStatus?.llm === "online" ? "online" : systemStatus?.llm === "offline" ? "offline" : "unknown";
+    setSystemStatus({ jarvis_core: jc, ha: haStatus, llm: llmStatus, uptime: 0 });
 
     // Load tasks from TODO.md
     try {
@@ -1808,13 +1812,12 @@ function SettingsTab() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
-      fetch("http://10.0.0.7:8123/api/", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
-      fetch("http://10.0.0.49:8080/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
-    ]).then(([jc, ha, llm]) => {
+      fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(5000) }).then(r => r.ok).catch(() => false),
+      fetch("/api/system-status", { signal: AbortSignal.timeout(5000) }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([jc, ss]) => {
       setJarvisOnline(jc);
-      setHaOnline(ha);
-      setLlmOnline(llm);
+      setHaOnline(ss?.ha === "online");
+      setLlmOnline(ss?.llm === "online");
     });
   }, []);
 
