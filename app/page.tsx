@@ -688,8 +688,64 @@ function DeviceControlSection() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [openRooms, setOpenRooms] = useState<Set<string>>(new Set(["Stue", "Kokken", "Blomgreen"]));
   const [selectedDomain, setSelectedDomain] = useState<"all" | "light" | "switch" | "climate">("all");
+  const [liveConnected, setLiveConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => { loadDevices(); }, []);
+
+  // WebSocket for live device state updates
+  useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const jarvisUrl = process.env.NEXT_PUBLIC_JARVIS_URL || "http://localhost:8080";
+    const wsUrl = jarvisUrl.replace(/^http/, "ws") + "/ws/devices";
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => setLiveConnected(true);
+    ws.onclose = () => setLiveConnected(false);
+    ws.onerror = () => setLiveConnected(false);
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data as string);
+        if (msg.type === "state_snapshot") {
+          const tracked: DeviceEntity[] = [];
+          for (const entity of msg.entities || []) {
+            const domain = entity.entity_id.split(".")[0];
+            if (!["light", "switch", "climate"].includes(domain)) continue;
+            tracked.push({
+              entity_id: entity.entity_id,
+              friendly_name: entity.attributes?.friendly_name || entity.entity_id.replace(/^[^_]+_/, "").replace(/_/g, " "),
+              state: entity.state,
+              domain: domain,
+              attributes: entity.attributes || {},
+            });
+          }
+          setDevices(tracked);
+          setLoading(false);
+        } else if (msg.type === "state_changed") {
+          const changed = msg.changed || {};
+          setDevices(prev => {
+            const next = [...prev];
+            for (const [entityId, entity] of Object.entries(changed)) {
+              const idx = next.findIndex(d => d.entity_id === entityId);
+              if (entity && idx >= 0) {
+                next[idx] = {
+                  ...next[idx],
+                  state: (entity as any).state,
+                  attributes: (entity as any).attributes || next[idx].attributes,
+                };
+              }
+            }
+            return next;
+          });
+        }
+      } catch { /* ignore */ }
+    };
+
+    return () => { ws.close(); wsRef.current = null; };
+  }, []);
 
   const loadDevices = async () => {
     setLoading(true);
@@ -796,6 +852,10 @@ function DeviceControlSection() {
         <div className="flex items-center gap-2">
           <h2 className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Device Control</h2>
           <span className="text-[10px] text-cyan-400/60 font-mono">{lightsOn}/{totalLights} on</span>
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${liveConnected ? "bg-green-400" : "bg-red-400"}`}
+            title={liveConnected ? "Live updates connected" : "Live updates disconnected"}
+          />
         </div>
         <button
           onClick={loadDevices}
