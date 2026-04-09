@@ -191,7 +191,7 @@ function ChatTab() {
 
   // Check JARVIS health
   useEffect(() => {
-    fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) })
+    fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(3000) })
       .then(r => { if (r.ok) setJarvisOnline(true); else setJarvisOnline(false); })
       .catch(() => setJarvisOnline(false));
   }, []);
@@ -259,7 +259,7 @@ function ChatTab() {
     abortRef.current = new AbortController();
 
     try {
-      const res = await fetch("http://localhost:8080/api/chat", {
+      const res = await fetch("/api/jarvis-proxy/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg }),
@@ -500,7 +500,7 @@ function HomeTab({ onRefresh, lastUpdate, loading }: { onRefresh: () => void; la
 
   const loadData = async () => {
     const [jc, ha, llm] = await Promise.all([
-      fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
+      fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
       fetch("http://10.0.0.7:8123/api/", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
       fetch("http://10.0.0.49:8080/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? "online" : "offline").catch(() => "offline" as const),
     ]);
@@ -659,6 +659,322 @@ function HomeTab({ onRefresh, lastUpdate, loading }: { onRefresh: () => void; la
 
       {/* Scenes & Macros */}
       <ScenesSection />
+
+      {/* Device Control */}
+      <DeviceControlSection />
+    </div>
+  );
+}
+
+// ─── Device Control Section ────────────────────────────────────────────────────
+
+interface DeviceEntity {
+  entity_id: string;
+  friendly_name: string;
+  state: string;
+  domain: string;
+  attributes: Record<string, any>;
+}
+
+interface RoomDevices {
+  lights: DeviceEntity[];
+  switches: DeviceEntity[];
+  climate: DeviceEntity[];
+}
+
+function DeviceControlSection() {
+  const [devices, setDevices] = useState<DeviceEntity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [openRooms, setOpenRooms] = useState<Set<string>>(new Set(["Stue", "Kokken", "Blomgreen"]));
+  const [selectedDomain, setSelectedDomain] = useState<"all" | "light" | "switch" | "climate">("all");
+
+  useEffect(() => { loadDevices(); }, []);
+
+  const loadDevices = async () => {
+    setLoading(true);
+    try {
+      const [lights, switches, climate] = await Promise.all([
+        fetch("/api/jarvis-proxy/devices?domain=light").then(r => r.ok ? r.json() : { entities: [] }).catch(() => ({ entities: [] })),
+        fetch("/api/jarvis-proxy/devices?domain=switch").then(r => r.ok ? r.json() : { entities: [] }).catch(() => ({ entities: [] })),
+        fetch("/api/jarvis-proxy/devices?domain=climate").then(r => r.ok ? r.json() : { entities: [] }).catch(() => ({ entities: [] })),
+      ]);
+      const all: DeviceEntity[] = [
+        ...(lights.entities || []),
+        ...(switches.entities || []),
+        ...(climate.entities || []),
+      ].map(e => ({
+        entity_id: e.entity_id,
+        friendly_name: e.attributes?.friendly_name || e.friendly_name || e.entity_id.replace(/^[^_]+_/, "").replace(/_/g, " "),
+        state: e.state,
+        domain: e.domain,
+        attributes: e.attributes || {},
+      }));
+      setDevices(all);
+    } catch { setDevices([]); }
+    setLoading(false);
+  };
+
+  const toggle = async (entity: DeviceEntity) => {
+    setToggling(entity.entity_id);
+    try {
+      const action = entity.state === "on" ? "turn_off" : "turn_on";
+      const body: Record<string, any> = { action };
+      // For lights, preserve brightness if dimming
+      if (entity.domain === "light" && entity.attributes?.brightness != null && action === "turn_on") {
+        body.brightness = entity.attributes.brightness;
+      }
+      const res = await fetch(`/api/jarvis-proxy/devices/${entity.entity_id}/control`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setDevices(prev => prev.map(d =>
+          d.entity_id === entity.entity_id
+            ? { ...d, state: action === "turn_on" ? "on" : "off" }
+            : d
+        ));
+      }
+    } catch {}
+    setToggling(null);
+  };
+
+  const setBrightness = async (entity: DeviceEntity, brightness: number) => {
+    setDevices(prev => prev.map(d =>
+      d.entity_id === entity.entity_id
+        ? { ...d, state: "on", attributes: { ...d.attributes, brightness } }
+        : d
+    ));
+    try {
+      await fetch(`/api/jarvis-proxy/devices/${entity.entity_id}/control`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "turn_on", brightness }),
+      });
+    } catch {}
+  };
+
+  const groupByRoom = (entities: DeviceEntity[]): Record<string, RoomDevices> => {
+    const rooms: Record<string, RoomDevices> = {};
+    for (const e of entities) {
+      const name = e.friendly_name.toLowerCase();
+      let room = "Other";
+      if (name.includes("stue") || name.includes("living")) room = "Stue";
+      else if (name.includes("kokken") || name.includes("kitchen")) room = "Kokken";
+      else if (name.includes("blomgreen")) room = "Blomgreen";
+      else if (name.includes("alex") || name.includes("alexander")) room = "Alex";
+      else if (name.includes("gang") || name.includes("hall")) room = "Gang";
+      else if (name.includes("toilet") || name.includes("bath")) room = "Toilet";
+      if (!rooms[room]) rooms[room] = { lights: [], switches: [], climate: [] };
+      if (e.domain === "light") rooms[room].lights.push(e);
+      else if (e.domain === "switch") rooms[room].switches.push(e);
+      else if (e.domain === "climate") rooms[room].climate.push(e);
+    }
+    return rooms;
+  };
+
+  const filtered = devices.filter(d => {
+    if (selectedDomain === "all") return true;
+    return d.domain === selectedDomain;
+  });
+
+  const rooms = groupByRoom(filtered);
+  const lightsOn = devices.filter(d => d.domain === "light" && d.state === "on").length;
+  const totalLights = devices.filter(d => d.domain === "light").length;
+
+  const domainFilters: Array<{ key: typeof selectedDomain; label: string; count: number }> = [
+    { key: "all", label: "All", count: devices.length },
+    { key: "light", label: "💡 Lights", count: totalLights },
+    { key: "switch", label: "🔌 Switches", count: devices.filter(d => d.domain === "switch").length },
+    { key: "climate", label: "🌡️ Climate", count: devices.filter(d => d.domain === "climate").length },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Device Control</h2>
+          <span className="text-[10px] text-cyan-400/60 font-mono">{lightsOn}/{totalLights} on</span>
+        </div>
+        <button
+          onClick={loadDevices}
+          disabled={loading}
+          className="text-[10px] text-slate-500 hover:text-slate-300 disabled:opacity-50"
+        >
+          ↻ {loading ? "..." : devices.length}
+        </button>
+      </div>
+
+      {/* Domain filter chips */}
+      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+        {domainFilters.filter(d => d.count > 0 || d.key === "all").map(f => (
+          <button
+            key={f.key}
+            onClick={() => setSelectedDomain(f.key)}
+            className={`flex-shrink-0 text-[10px] px-2.5 py-1 rounded-full border transition-all ${
+              selectedDomain === f.key
+                ? "bg-cyan-950/30 border-cyan-500/40 text-cyan-400"
+                : "bg-[#12121a] border-[#2a2a3a] text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {loading && devices.length === 0 ? (
+        <div className="space-y-2">
+          {[1,2,3].map(i => (
+            <div key={i} className="h-16 bg-[#12121a] border border-[#2a2a3a] rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {Object.entries(rooms)
+            .sort(([a], [b]) => {
+              const order = ["Stue", "Kokken", "Blomgreen", "Alex", "Gang", "Toilet", "Other"];
+              return order.indexOf(a) - order.indexOf(b);
+            })
+            .map(([room, devs]) => {
+              const isOpen = openRooms.has(room);
+              const onCount = devs.lights.filter(l => l.state === "on").length + devs.switches.filter(s => s.state === "on").length;
+              return (
+                <div key={room} className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setOpenRooms(prev => {
+                        const next = new Set(prev);
+                        if (next.has(room)) next.delete(room);
+                        else next.add(room);
+                        return next;
+                      });
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-white font-medium">{room}</span>
+                      {onCount > 0 && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium">
+                          {onCount} on
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-slate-600 text-[10px]">
+                      {isOpen ? "▲" : "▼"} {devs.lights.length + devs.switches.length + devs.climate.length}
+                    </span>
+                  </button>
+
+                  {isOpen && (
+                    <div className="px-3 pb-3 space-y-1.5 border-t border-[#2a2a3a]/50">
+                      {/* Lights */}
+                      {devs.lights.filter(l => selectedDomain === "all" || l.domain === selectedDomain).map(light => {
+                        const isOn = light.state === "on";
+                        const bright = light.attributes?.brightness ?? 255;
+                        const pct = Math.round((bright / 255) * 100);
+                        const isToggling = toggling === light.entity_id;
+                        return (
+                          <div key={light.entity_id} className="flex items-center gap-2 py-1.5">
+                            <button
+                              onClick={() => !isToggling && toggle(light)}
+                              disabled={!!isToggling}
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs flex-shrink-0 transition-all active:scale-90 ${
+                                isOn ? "bg-amber-500/20 text-amber-400" : "bg-slate-800 text-slate-500"
+                              } ${isToggling ? "opacity-40" : ""}`}
+                            >
+                              💡
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-[11px] truncate ${isOn ? "text-white" : "text-slate-500"}`}>
+                                {light.friendly_name}
+                              </p>
+                              {isOn && (
+                                <input
+                                  type="range"
+                                  min={1}
+                                  max={255}
+                                  value={bright}
+                                  onChange={e => setBrightness(light, parseInt(e.target.value))}
+                                  className="w-full h-1 mt-0.5 accent-amber-400"
+                                />
+                              )}
+                            </div>
+                            {isOn && (
+                              <span className="text-[9px] text-amber-400/60 font-mono flex-shrink-0">{pct}%</span>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Switches */}
+                      {devs.switches.filter(s => selectedDomain === "all" || s.domain === selectedDomain).map(sw => {
+                        const isOn = sw.state === "on";
+                        const isToggling = toggling === sw.entity_id;
+                        return (
+                          <div key={sw.entity_id} className="flex items-center gap-2 py-1.5">
+                            <button
+                              onClick={() => !isToggling && toggle(sw)}
+                              disabled={!!isToggling}
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs flex-shrink-0 transition-all active:scale-90 ${
+                                isOn ? "bg-violet-500/20 text-violet-400" : "bg-slate-800 text-slate-500"
+                              } ${isToggling ? "opacity-40" : ""}`}
+                            >
+                              ⌫
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-[11px] truncate ${isOn ? "text-white" : "text-slate-500"}`}>
+                                {sw.friendly_name}
+                              </p>
+                            </div>
+                            {isOn && (
+                              <span className="text-[9px] text-violet-400/60 font-mono flex-shrink-0">ON</span>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Climate */}
+                      {devs.climate.filter(c => selectedDomain === "all" || c.domain === selectedDomain).map(cl => {
+                        const temp = cl.attributes?.current_temperature;
+                        const target = cl.attributes?.temperature;
+                        const mode = cl.attributes?.hvac_action || cl.state;
+                        return (
+                          <div key={cl.entity_id} className="flex items-center gap-2 py-1.5">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs flex-shrink-0 bg-red-500/10 text-red-400">
+                              🌡️
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[11px] text-white truncate">{cl.friendly_name}</p>
+                              <p className="text-[10px] text-slate-500">
+                                {temp != null ? `${temp.toFixed(1)}°` : "—"}
+                                {target != null ? ` → ${target.toFixed(0)}°` : ""}
+                              </p>
+                            </div>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                              mode === "heating" ? "bg-red-500/20 text-red-400" :
+                              mode === "cooling" ? "bg-blue-500/20 text-blue-400" :
+                              "bg-slate-800 text-slate-500"
+                            }`}>
+                              {mode || "off"}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {devs.lights.length === 0 && devs.switches.length === 0 && devs.climate.length === 0 && (
+                        <p className="text-[11px] text-slate-600 py-2 text-center">No devices in this room</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+          {devices.length === 0 && (
+            <p className="text-[11px] text-slate-600 text-center py-4">No devices found</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -686,9 +1002,9 @@ function ScenesSection() {
     setLoading(true);
     try {
       const [scenes, automations, scripts] = await Promise.all([
-        fetch("http://localhost:8080/api/devices?domain=scene").then(r => r.json()).catch(() => ({ entities: [] })),
-        fetch("http://localhost:8080/api/devices?domain=automation").then(r => r.json()).catch(() => ({ entities: [] })),
-        fetch("http://localhost:8080/api/devices?domain=script").then(r => r.json()).catch(() => ({ entities: [] })),
+        fetch("/api/jarvis-proxy/devices?domain=scene").then(r => r.json()).catch(() => ({ entities: [] })),
+        fetch("/api/jarvis-proxy/devices?domain=automation").then(r => r.json()).catch(() => ({ entities: [] })),
+        fetch("/api/jarvis-proxy/devices?domain=script").then(r => r.json()).catch(() => ({ entities: [] })),
       ]);
       const all: SceneEntity[] = [
         ...(scenes.entities || []),
@@ -708,7 +1024,7 @@ function ScenesSection() {
   const trigger = async (entity: SceneEntity) => {
     setTriggering(entity.entity_id);
     try {
-      const res = await fetch(`http://localhost:8080/api/devices/${entity.entity_id}/control`, {
+      const res = await fetch(`/api/jarvis-proxy/devices/${entity.entity_id}/control`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "turn_on" }),
@@ -1039,7 +1355,7 @@ function VoiceTab() {
 
   // Check JARVIS health on mount
   useEffect(() => {
-    fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) })
+    fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(3000) })
       .then(r => setIsJarvisOnline(r.ok))
       .catch(() => setIsJarvisOnline(false));
   }, []);
@@ -1099,7 +1415,7 @@ function VoiceTab() {
     setError(null);
     setState("connecting");
 
-    const ws = new WebSocket("ws://localhost:8080/ws/voice");
+    const ws = new WebSocket(`ws://${window.location.hostname}:3457`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -1455,7 +1771,7 @@ function SettingsTab() {
 
   useEffect(() => {
     Promise.all([
-      fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
+      fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
       fetch("http://10.0.0.7:8123/api/", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
       fetch("http://10.0.0.49:8080/health", { signal: AbortSignal.timeout(3000) }).then(r => r.ok).catch(() => false),
     ]).then(([jc, ha, llm]) => {
@@ -1585,7 +1901,7 @@ function VoiceSettingsSection() {
   const [ttsSpeed, setTtsSpeed] = useState(1.0);
 
   useEffect(() => {
-    fetch("http://localhost:8080/api/config/voice", { signal: AbortSignal.timeout(5000) })
+    fetch("/api/jarvis-proxy/config/voice", { signal: AbortSignal.timeout(5000) })
       .then(r => r.ok ? r.json() : null)
       .then((data: VoiceConfig | null) => {
         if (data) {
@@ -1606,7 +1922,7 @@ function VoiceSettingsSection() {
     setSaved(false);
     setError(null);
     try {
-      const res = await fetch("http://localhost:8080/api/config/voice", {
+      const res = await fetch("/api/jarvis-proxy/config/voice", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1837,7 +2153,7 @@ function ActivityTab() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:8080/api/activity?limit=100");
+      const res = await fetch("/api/jarvis-proxy/activity?limit=100");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: ActivityItem[] = await res.json();
       setActivities(data);
@@ -1850,7 +2166,7 @@ function ActivityTab() {
 
   // Check JARVIS online status
   useEffect(() => {
-    fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) })
+    fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(3000) })
       .then(r => setJarvisOnline(r.ok))
       .catch(() => setJarvisOnline(false));
   }, []);
@@ -2120,7 +2436,7 @@ export default function JarvisDashboard() {
   const [jarvisOnline, setJarvisOnline] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8080/api/health", { signal: AbortSignal.timeout(3000) })
+    fetch("/api/jarvis-proxy/health", { signal: AbortSignal.timeout(3000) })
       .then(r => setJarvisOnline(r.ok))
       .catch(() => setJarvisOnline(false));
   }, []);
