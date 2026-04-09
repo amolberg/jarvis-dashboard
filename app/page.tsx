@@ -689,62 +689,38 @@ function DeviceControlSection() {
   const [openRooms, setOpenRooms] = useState<Set<string>>(new Set(["Stue", "Kokken", "Blomgreen"]));
   const [selectedDomain, setSelectedDomain] = useState<"all" | "light" | "switch" | "climate">("all");
   const [liveConnected, setLiveConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
 
-  useEffect(() => { loadDevices(); }, []);
-
-  // WebSocket for live device state updates
+  // Load devices on mount, then poll every 5s for live updates
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const jarvisUrl = process.env.NEXT_PUBLIC_JARVIS_URL || "http://localhost:8080";
-    const wsUrl = jarvisUrl.replace(/^http/, "ws") + "/ws/devices";
-
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => setLiveConnected(true);
-    ws.onclose = () => setLiveConnected(false);
-    ws.onerror = () => setLiveConnected(false);
-
-    ws.onmessage = (event) => {
+    const poll = async () => {
       try {
-        const msg = JSON.parse(event.data as string);
-        if (msg.type === "state_snapshot") {
-          const tracked: DeviceEntity[] = [];
-          for (const entity of msg.entities || []) {
-            const domain = entity.entity_id.split(".")[0];
-            if (!["light", "switch", "climate"].includes(domain)) continue;
-            tracked.push({
-              entity_id: entity.entity_id,
-              friendly_name: entity.attributes?.friendly_name || entity.entity_id.replace(/^[^_]+_/, "").replace(/_/g, " "),
-              state: entity.state,
-              domain: domain,
-              attributes: entity.attributes || {},
-            });
-          }
-          setDevices(tracked);
-          setLoading(false);
-        } else if (msg.type === "state_changed") {
-          const changed = msg.changed || {};
-          setDevices(prev => {
-            const next = [...prev];
-            for (const [entityId, entity] of Object.entries(changed)) {
-              const idx = next.findIndex(d => d.entity_id === entityId);
-              if (entity && idx >= 0) {
-                next[idx] = {
-                  ...next[idx],
-                  state: (entity as any).state,
-                  attributes: (entity as any).attributes || next[idx].attributes,
-                };
-              }
-            }
-            return next;
-          });
-        }
-      } catch { /* ignore */ }
+        const [lights, switches, climate] = await Promise.all([
+          fetch("/api/jarvis-proxy/devices?domain=light").then(r => r.ok ? r.json() : { entities: [] }).catch(() => ({ entities: [] })),
+          fetch("/api/jarvis-proxy/devices?domain=switch").then(r => r.ok ? r.json() : { entities: [] }).catch(() => ({ entities: [] })),
+          fetch("/api/jarvis-proxy/devices?domain=climate").then(r => r.ok ? r.json() : { entities: [] }).catch(() => ({ entities: [] })),
+        ]);
+        const all: DeviceEntity[] = [
+          ...(lights.entities || []),
+          ...(switches.entities || []),
+          ...(climate.entities || []),
+        ].map(e => ({
+          entity_id: e.entity_id,
+          friendly_name: e.attributes?.friendly_name || e.friendly_name || e.entity_id.replace(/^[^_]+_/, "").replace(/_/g, " "),
+          state: e.state,
+          domain: e.domain,
+          attributes: e.attributes || {},
+        }));
+        setDevices(all);
+        setLoading(false);
+        setLiveConnected(true);
+      } catch {
+        setLiveConnected(false);
+      }
     };
 
-    return () => { ws.close(); wsRef.current = null; };
+    poll(); // immediate load
+    const interval = setInterval(poll, 5000); // poll every 5s
+    return () => clearInterval(interval);
   }, []);
 
   const loadDevices = async () => {
@@ -767,6 +743,7 @@ function DeviceControlSection() {
         attributes: e.attributes || {},
       }));
       setDevices(all);
+      setLiveConnected(true);
     } catch { setDevices([]); }
     setLoading(false);
   };
